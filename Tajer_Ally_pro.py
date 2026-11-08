@@ -1,7 +1,7 @@
 # ba_meta require api 9
 # ═══════════════════════════════════════════════════════════════
-# BSLIFE Ally Manager — v11.0 (Valhalla Crimson Edition)
-# Made with Tajer and Windows an Taha
+# BSLIFE Ally Manager — v11.0
+# Made with Tajer and Windows
 # api 9 — mod is Free
 # Channel: @Tajerbetbot
 # ═══════════════════════════════════════════════════════════════
