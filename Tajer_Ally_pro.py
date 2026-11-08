@@ -1,13 +1,12 @@
 # ba_meta require api 9
-# BSLIFE Ally Manager — v11 ULTRA
-# Made with Tajer · @Tajerbetbot · api 9 · Free
+# ═══════════════════════════════════════════════════════════════
+# BSLIFE Ally Manager — v11.0 (Valhalla Crimson Edition)
+# Made with Tajer and Windows an Taha
+# api 9 — mod is Free
+# Channel: @Tajerbetbot
+# ═══════════════════════════════════════════════════════════════
 
 from __future__ import annotations
-
-import babase
-import bauiv1 as bui
-import bascenev1 as bs
-from bauiv1lib import party
 
 import colorsys
 import http.cookiejar
@@ -20,41 +19,65 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from typing import Any, Dict, List, Optional, Tuple
+
+import babase
+import bauiv1 as bui
+from bauiv1lib import party
 
 # ═══════════════════════════════════════════════════════════════
-# CONFIG
+# ⚙️ GLOBAL CONFIGURATION & SETTINGS
 # ═══════════════════════════════════════════════════════════════
 
+# API Endpoint
 BASE_URL = "https://bslife.ir"
+
+# Data Directory for saving sessions and logs
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".bslife_ally")
 os.makedirs(DATA_DIR, exist_ok=True)
+
+# Paths
 SESSION_FILE = os.path.join(DATA_DIR, "session.json")
 LOG_FILE = os.path.join(DATA_DIR, "bslife_debug.log")
 
-CHANNEL_NAME = "Tajer"
-CHANNEL_HANDLE = "@Tajerbetbot"
-CHANNEL_URL = "https://t.me/Tajerbetbot"
+# Configuration Keys (for saving user preferences)
+_CFG_THEME = 'BetterParty_Theme'
+_CFG_FX = 'BetterParty_FX'
+_CFG_SPEED = 'BetterParty_Speed'
 
+# Global time reference for animations (used to calculate sine waves)
+_FX_T0 = time.time()
+
+# Default Text Colors
+TXT = (0.94, 0.96, 1.0)       # Normal text
+DIM = (0.72, 0.82, 0.95)      # Dimmed text
+GOLD = (1.0, 0.86, 0.35)      # Gold highlight text
+GREEN = (0.5, 1.0, 0.6)       # Success text
+RED = (1.0, 0.5, 0.45)        # Error text
+
+# Wrapper for threading callbacks
 MyCall = getattr(bui, 'CallPartial', bui.Call)
 
-
 # ═══════════════════════════════════════════════════════════════
-# LANGUAGE
+# 🌐 LANGUAGE & TRANSLATIONS
 # ═══════════════════════════════════════════════════════════════
 
-def _is_fa():
+def get_is_persian():
+    """Checks if the current game language is Persian/Farsi."""
     try:
-        return bui.app.lang.language in ("Persian", "fa", "Farsi")
+        lang = bui.app.lang.language
+        return lang == "Persian" or lang == "fa" or lang == "Farsi"
     except Exception:
         return False
 
-IS_FA = _is_fa()
+IS_FA = get_is_persian()
 
+# Comprehensive Translation Dictionary
 T = {
     "login": {"fa": "ورود", "en": "Login"},
     "logout": {"fa": "خروج", "en": "Logout"},
     "cancel": {"fa": "انصراف", "en": "Cancel"},
-    "overview": {"fa": "مرور", "en": "Overview"},
+    "overview": {"fa": "مرور کلی", "en": "Overview"},
     "members": {"fa": "اعضا", "en": "Members"},
     "requests": {"fa": "درخواست‌ها", "en": "Requests"},
     "vault": {"fa": "خزانه", "en": "Vault"},
@@ -62,7 +85,7 @@ T = {
     "ranking": {"fa": "رنکینگ", "en": "Ranking"},
     "chat": {"fa": "چت", "en": "Chat"},
     "news": {"fa": "اخبار", "en": "News"},
-    "channels": {"fa": "کانال", "en": "Channel"},
+    "channels": {"fa": "کانال‌ها", "en": "Channels"},
     "manage": {"fa": "مدیریت", "en": "Manage"},
     "title": {"fa": "عنوان", "en": "Title"},
     "color": {"fa": "رنگ", "en": "Color"},
@@ -77,118 +100,125 @@ T = {
     "spy": {"fa": "جاسوس", "en": "Spy"},
     "member": {"fa": "عضو", "en": "Member"},
     "deposit": {"fa": "واریز", "en": "Deposit"},
-    "split": {"fa": "تقسیم", "en": "Split"},
+    "split": {"fa": "تقسیم خزانه", "en": "Split Vault"},
     "capacity": {"fa": "ظرفیت", "en": "Capacity"},
-    "buy": {"fa": "خرید", "en": "Buy"},
+    "buy_1": {"fa": "خرید +۱", "en": "Buy +1"},
     "new": {"fa": "جدید", "en": "New"},
-    "accepted": {"fa": "تایید", "en": "Accepted"},
-    "rejected": {"fa": "رد", "en": "Rejected"},
-    "yes": {"fa": "بله", "en": "Yes"},
-    "no": {"fa": "نه", "en": "No"},
+    "accepted": {"fa": "تایید شده", "en": "Accepted"},
+    "rejected": {"fa": "رد شده", "en": "Rejected"},
+    "yes": {"fa": "قبول", "en": "Accept"},
+    "no": {"fa": "رد", "en": "Reject"},
+    "yes2": {"fa": "بله", "en": "Yes"},
+    "no2": {"fa": "خیر", "en": "No"},
     "ready": {"fa": "آماده", "en": "Ready"},
-    "loading": {"fa": "در حال لود", "en": "Loading"},
-    "expired": {"fa": "سشن منقضی", "en": "Session expired"},
-    "recovering": {"fa": "در حال بازیابی", "en": "Recovering"},
-    "not_ranked": {"fa": "رتبه‌بندی نشده", "en": "Not ranked"},
-    "ally_name": {"fa": "نام اتحاد", "en": "Alliance"},
+    "loading": {"fa": "در حال لود...", "en": "Loading..."},
+    "session_expired": {"fa": "سشن منقضی شده", "en": "Session expired"},
+    "session_retry": {"fa": "سشن منقضی شده، در حال بازیابی...", "en": "Session expired, recovering..."},
+    "not_ranked": {"fa": "هنوز رتبه‌بندی نشده", "en": "Not ranked yet"},
+    "alliance_name": {"fa": "نام اتحاد", "en": "Alliance Name"},
     "your_role": {"fa": "نقش شما", "en": "Your Role"},
-    "members_count": {"fa": "تعداد اعضا", "en": "Members"},
+    "members_count": {"fa": "تعداد اعضا", "en": "Members Count"},
     "coins": {"fa": "سکه", "en": "Coins"},
-    "message": {"fa": "پیام", "en": "Message"},
+    "message": {"fa": "پیام...", "en": "Message..."},
     "send": {"fa": "ارسال", "en": "Send"},
-    "fill_all": {"fa": "همه فیلدها را پر کنید", "en": "Fill all fields"},
-    "logging_in": {"fa": "ورود", "en": "Logging in"},
-    "success_load": {"fa": "موفق", "en": "Success"},
+    "error_fill": {"fa": "لطفا هر دو فیلد را پر کنید!", "en": "Please fill both fields!"},
+    "logging_in": {"fa": "در حال ورود", "en": "Logging in"},
+    "success_loading": {"fa": "موفق! در حال لود...", "en": "Success! Loading..."},
     "error": {"fa": "خطا", "en": "Error"},
-    "hub": {"fa": "مرکز اتحاد", "en": "Alliance Hub"},
-    "no_ally": {"fa": "بدون اتحاد", "en": "Not in ally"},
-    "create": {"fa": "ساخت", "en": "Create"},
-    "join": {"fa": "پیوستن", "en": "Join"},
+    "hub_title": {"fa": "مرکز اتحادها", "en": "Alliance Hub"},
+    "not_in_ally": {"fa": "شما عضو هیچ اتحادی نیستید.", "en": "You are not in an alliance."},
+    "create_ally": {"fa": "ساخت اتحاد", "en": "Create Ally"},
+    "join_ally": {"fa": "پیوستن به اتحاد", "en": "Join Ally"},
     "search": {"fa": "جستجو", "en": "Search"},
     "cost": {"fa": "هزینه", "en": "Cost"},
     "user": {"fa": "کاربر", "en": "User"},
-    "req_sent": {"fa": "درخواست ارسال شد", "en": "Request sent"},
+    "no_ally": {"fa": "بدون اتحاد", "en": "No Ally"},
+    "request_sent": {"fa": "درخواست ارسال شد", "en": "Request sent"},
     "ok": {"fa": "باشه", "en": "OK"},
-    "request": {"fa": "درخواست", "en": "Request"},
+    "request_btn": {"fa": "درخواست", "en": "Request"},
+    "join_btn": {"fa": "عضویت", "en": "Join"},
     "confirm": {"fa": "تایید", "en": "Confirm"},
     "success": {"fa": "موفق", "en": "Success"},
     "fail": {"fa": "ناموفق", "en": "Failed"},
-    "enter_amount": {"fa": "مقدار", "en": "Amount"},
-    "equal_all": {"fa": "مساوی همه", "en": "Equal all"},
-    "equal_top": {"fa": "مساوی ۲۰ برتر", "en": "Equal top 20"},
-    "by_points": {"fa": "با امتیاز", "en": "By points"},
+    "enter_amount": {"fa": "مقدار را وارد کنید", "en": "Enter amount"},
+    "equal_all": {"fa": "مساوی بین همه", "en": "Equal: All"},
+    "equal_ranking": {"fa": "مساوی بین ۲۰ برتر", "en": "Equal: Top 20"},
+    "ranking_points": {"fa": "متناسب با امتیاز", "en": "By points"},
     "remove_role": {"fa": "حذف نقش", "en": "Remove role"},
-    "already_ally": {"fa": "در اتحادی", "en": "Already in ally"},
-    "no_coins": {"fa": "سکه کم", "en": "Not enough"},
-    "select": {"fa": "انتخاب", "en": "Select"},
-    "vault_ok": {"fa": "خزانه تقسیم شد", "en": "Split OK"},
-    "deposit_ok": {"fa": "واریز شد", "en": "Deposited"},
+    "create_fail": {"fa": "خطا در ساخت اتحاد", "en": "Create failed"},
+    "already_in_ally": {"fa": "شما در اتحاد دیگری هستید", "en": "Already in another ally"},
+    "not_enough_coins": {"fa": "سکه کافی نیست", "en": "Not enough coins"},
+    "select_type": {"fa": "نوع را انتخاب کنید", "en": "Select type"},
+    "select_role": {"fa": "نقش را انتخاب کنید", "en": "Select role"},
+    "vault_split_ok": {"fa": "خزانه تقسیم شد", "en": "Vault split successful"},
+    "deposit_ok": {"fa": "واریز موفق", "en": "Deposit successful"},
     "role_changed": {"fa": "نقش تغییر کرد", "en": "Role changed"},
-    "leave": {"fa": "خروج از اتحاد", "en": "Leave Ally"},
-    "leave_confirm": {"fa": "مطمئنید؟", "en": "Are you sure?"},
-    "vault_hist": {"fa": "تاریخچه خزانه", "en": "Vault History"},
-    "shares": {"fa": "سهام", "en": "Shares"},
+    "leave_ally": {"fa": "خروج از اتحاد", "en": "Leave Ally"},
+    "leave_confirm": {"fa": "مطمئنید می‌خواهید از اتحاد خارج شوید؟", "en": "Are you sure you want to leave?"},
+    "vault_news": {"fa": "تاریخچه خزانه", "en": "Vault History"},
+    "vault_shares": {"fa": "لیست سهام", "en": "Vault Shares"},
+    "shares_btn": {"fa": "سهام", "en": "Shares"},
     "history": {"fa": "تاریخچه", "en": "History"},
     "more": {"fa": "بیشتر", "en": "More"},
-    "no_news": {"fa": "خبری نیست", "en": "No news"},
-    "gkick": {"fa": "حد جنرال", "en": "General Kick Limit"},
+    "no_news": {"fa": "خبری وجود ندارد", "en": "No news available"},
+    "gkick": {"fa": "حذف مجاز جنرال", "en": "General Kick Limit"},
     "spynet": {"fa": "بودجه Spynet", "en": "Spynet Budget"},
-    "tag": {"fa": "وضعیت تگ", "en": "Tag Status"},
-    "active": {"fa": "فعال", "en": "Active"},
-    "inactive": {"fa": "غیرفعال", "en": "Inactive"},
-    "price": {"fa": "قیمت فروش", "en": "Sale Price"},
-    "enrol": {"fa": "تنظیمات عضوگیری", "en": "Enrolment"},
-    "direct": {"fa": "مستقیم", "en": "Direct"},
-    "reqmode": {"fa": "درخواستی", "en": "Request"},
-    "closed": {"fa": "بسته", "en": "Closed"},
+    "tag_status": {"fa": "وضعیت تگ", "en": "Tag Status"},
+    "tag_active": {"fa": "فعال", "en": "Active"},
+    "tag_inactive": {"fa": "غیرفعال", "en": "Inactive"},
+    "sale_price": {"fa": "فروش اتحاد", "en": "Ally Sale Price"},
+    "enrol_settings": {"fa": "تنظیمات عضوگیری", "en": "Enrolment Settings"},
+    "mode_direct": {"fa": "مستقیم", "en": "Direct"},
+    "mode_request": {"fa": "درخواستی", "en": "Request"},
+    "mode_closed": {"fa": "بسته", "en": "Closed"},
     "min_coin": {"fa": "حداقل سکه", "en": "Min Coins"},
-    "top": {"fa": "رتبه تاپ", "en": "Required Top"},
-    "score": {"fa": "حداقل امتیاز", "en": "Min Score"},
+    "req_top": {"fa": "رتبه تاپ", "en": "Required Top"},
+    "min_score": {"fa": "حداقل امتیاز", "en": "Min Score"},
     "saved": {"fa": "ذخیره شد", "en": "Saved"},
-    "rank_by": {"fa": "رتبه", "en": "Rank"},
-    "newest": {"fa": "جدیدترین", "en": "Newest"},
-    "oldest": {"fa": "قدیمی‌ترین", "en": "Oldest"},
-    "most": {"fa": "بیشترین", "en": "Most"},
-    "style": {"fa": "تم", "en": "Style"},
+    "order_rank": {"fa": "رتبه", "en": "Rank"},
+    "order_new": {"fa": "جدیدترین", "en": "Newest"},
+    "order_old": {"fa": "قدیمی‌ترین", "en": "Oldest"},
+    "order_count": {"fa": "بیشترین عضو", "en": "Most Members"},
+    "style": {"fa": "ظاهر", "en": "Style"},
     "set": {"fa": "تنظیم", "en": "Set"},
     "change": {"fa": "تغییر", "en": "Change"},
+    "toggle": {"fa": "تغییر وضعیت", "en": "Toggle"},
     "forced": {"fa": "اجباری", "en": "Forced"},
     "off": {"fa": "خاموش", "en": "Off"},
-    "bot": {"fa": "ربات تلگرام", "en": "Telegram Bot"},
+    "bot_link": {"fa": "اتصال به ربات تلگرام", "en": "Telegram Bot Link"},
     "join_mode": {"fa": "حالت ورود", "en": "Join Mode"},
     "not_set": {"fa": "تنظیم نشده", "en": "Not set"},
-    "role_full": {"fa": "ظرفیت نقش پر", "en": "Role full"},
-    "no_bot": {"fa": "بدون بات", "en": "No bot"},
-    "empty": {"fa": "خالی", "en": "Empty"},
+    "role_full": {"fa": "ظرفیت نقش پر است", "en": "Role capacity is full"},
+    "no_bot": {"fa": "اکانت به بات متصل نیست", "en": "Account not linked to bot"},
+    "no_ranking": {"fa": "اطلاعات رنکینگ موجود نیست", "en": "No ranking data"},
+    "enter_name": {"fa": "نام را وارد کنید", "en": "Enter a name"},
+    "req_rejected": {"fa": "درخواست شما قبلا رد شده است.", "en": "Your request was rejected before."},
+    "req_pending": {"fa": "درخواست شما در انتظار بررسی است.", "en": "Your request is pending."},
+    "left_recent": {"fa": "اخیرا از این اتحاد خارج شده‌اید. ۲۴ ساعت صبر کنید.", "en": "You left this ally recently. Wait 24 hours."},
+    "no_requirements": {"fa": "شما شرایط لازم برای ورود را ندارید.", "en": "You don't meet the requirements."},
+    "needed": {"fa": "شرایط مورد نیاز", "en": "Required"},
+    "min_deposit": {"fa": "حداقل واریز ۱۰۰ سکه است", "en": "Minimum deposit is 100 coins"},
+    "select_mode": {"fa": "انتخاب حالت", "en": "Select Mode"},
+    "empty": {"fa": "موردی وجود ندارد", "en": "Nothing here"},
     "username": {"fa": "اسم خاص", "en": "Username"},
-    "otp": {"fa": "کد لاگین", "en": "OTP"},
-    "login_h1": {"fa": "• در چت بازی تایپ کنید: login", "en": "• In-game chat: login"},
-    "login_h2": {"fa": "• یا در @BslifeBot: login", "en": "• Or @BslifeBot: login"},
-    "login_sub": {"fa": "مدیریت اتحاد در بازی", "en": "Manage your ally in-game"},
-    "join_req_sent": {"fa": "درخواست ارسال شد", "en": "Request sent"},
-    "min_deposit": {"fa": "حداقل ۱۰۰ سکه", "en": "Minimum 100 coins"},
-    "no_data": {"fa": "داده‌ای نیست", "en": "No data"},
-    "amount_hint": {"fa": "مقدار سکه...", "en": "Coins amount..."},
-    "search_hint": {"fa": "جستجوی اتحاد...", "en": "Search ally..."},
-    "name_hint": {"fa": "نام اتحاد...", "en": "Ally name..."},
-    "msg_hint": {"fa": "پیام...", "en": "Message..."},
-    "left_recent": {"fa": "اخیراً خارج شده‌اید", "en": "Recently left"},
-    "pending": {"fa": "در انتظار", "en": "Pending"},
-    "req_rejected": {"fa": "قبلاً رد شده", "en": "Previously rejected"},
-    "no_req": {"fa": "شرایط را ندارید", "en": "Requirements not met"},
-    "needed": {"fa": "نیازمندی‌ها", "en": "Requirements"},
-    "open": {"fa": "باز کردن", "en": "Open"},
+    "otp": {"fa": "کد لاگین", "en": "Login code"},
+    "login_h1": {"fa": "• در چت بازی تایپ کنید: login", "en": "• In BombSquad chat, type: login"},
+    "login_h2": {"fa": "• یا در بات @BslifeBot: login", "en": "• Or message @BslifeBot: login"},
+    "login_sub": {"fa": "مدیریت اتحاد از داخل بازی", "en": "Manage your alliance in-game"},
+    "theme": {"fa": "تم", "en": "Theme"},
 }
 
 def L(key):
-    return T.get(key, {}).get("fa" if IS_FA else "en", key)
-
+    """Returns the translated string based on the current language."""
+    lang = "fa" if IS_FA else "en"
+    return T.get(key, {}).get(lang, key)
 
 # ═══════════════════════════════════════════════════════════════
-# LOGGING & UTILS
+# 📝 LOGGING & UTILITIES
 # ═══════════════════════════════════════════════════════════════
 
 def log(msg):
+    """Writes a message to the debug log file."""
     try:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
@@ -196,131 +226,29 @@ def log(msg):
         pass
 
 def fmt(n):
+    """Formats a number with thousand separators (e.g., 1,000)."""
     try:
         return f"{int(n):,}"
     except Exception:
         return str(n)
 
 def role_name(rid):
+    """Returns the name of a role by its ID."""
     return L({1: "leader", 2: "general", 3: "spy"}.get(rid, "member"))
 
+def role_color(rid):
+    """Returns the corresponding color for a role ID."""
+    return {1: (1.0, 0.8, 0.25), 2: (0.55, 0.75, 1.0), 3: (0.85, 0.6, 1.0)}.get(rid, (0.85, 0.9, 1.0))
 
 # ═══════════════════════════════════════════════════════════════
-# THEME SYSTEM — 10 luxurious themes
-# ═══════════════════════════════════════════════════════════════
-
-THEMES = {
-    'Aurora':    dict(a=(0.20, 0.45, 1.00), b=(0.15, 0.85, 0.60), icon='✦'),
-    'Midnight':  dict(a=(0.15, 0.15, 0.45), b=(0.40, 0.15, 0.65), icon='☾'),
-    'Lava':      dict(a=(1.00, 0.35, 0.10), b=(0.85, 0.10, 0.20), icon='🔥'),
-    'Ocean':     dict(a=(0.05, 0.45, 0.95), b=(0.05, 0.85, 0.85), icon='🌊'),
-    'Galaxy':    dict(a=(0.55, 0.20, 0.95), b=(0.25, 0.10, 0.60), icon='✧'),
-    'Gold':      dict(a=(1.00, 0.82, 0.25), b=(0.95, 0.55, 0.10), icon='★'),
-    'Emerald':   dict(a=(0.15, 0.90, 0.45), b=(0.05, 0.60, 0.30), icon='❦'),
-    'Rose':      dict(a=(1.00, 0.45, 0.70), b=(0.85, 0.20, 0.55), icon='❀'),
-    'Frost':     dict(a=(0.65, 0.90, 1.00), b=(0.85, 0.95, 1.00), icon='❄'),
-    'Neon':      dict(a=(1.00, 0.15, 0.85), b=(0.15, 0.85, 1.00), icon='⚡'),
-}
-THEME_ORDER = list(THEMES.keys())
-
-_CFG_THEME = 'BSLIFE_Theme'
-_FX_T0 = time.time()
-
-def _theme_current():
-    try:
-        name = babase.app.config.get(_CFG_THEME, 'Aurora')
-        if name not in THEMES:
-            name = 'Aurora'
-        return name, THEMES[name]
-    except Exception:
-        return 'Aurora', THEMES['Aurora']
-
-def _theme_rgb(theme, elapsed):
-    period = 5.0
-    phase = (elapsed % period) / period
-    t = (1 - math.cos(phase * math.pi * 2)) / 2
-    ha, sa, va = colorsys.rgb_to_hsv(*theme['a'])
-    hb, sb, vb = colorsys.rgb_to_hsv(*theme['b'])
-    dh = hb - ha
-    if dh > 0.5:
-        dh -= 1.0
-    elif dh < -0.5:
-        dh += 1.0
-    h = (ha + dh * t) % 1.0
-    s = sa + (sb - sa) * t
-    v = va + (vb - va) * t
-    v = min(1.0, v * (0.93 + 0.07 * math.sin(elapsed * 2.3)))
-    return colorsys.hsv_to_rgb(h, s, v)
-
-
-# ═══════════════════════════════════════════════════════════════
-# COLOR UTILITIES
-# ═══════════════════════════════════════════════════════════════
-
-def hsv(h, s, v):
-    return colorsys.hsv_to_rgb(h % 1.0, max(0.0, min(1.0, s)), max(0.0, min(1.0, v)))
-
-def _palette(base_rgb):
-    h, s, _v = colorsys.rgb_to_hsv(*base_rgb)
-    s = min(1.0, 0.20 + s * 0.75)
-    return {
-        'bg_top':    hsv(h, s * 0.85, 0.10),
-        'bg_bot':    hsv(h, s * 0.85, 0.06),
-        'surface':   hsv(h, s * 0.75, 0.18),
-        'surface_hi': hsv(h, s * 0.75, 0.24),
-        'surface_lo': hsv(h, s * 0.75, 0.13),
-        'header':    hsv(h, s * 0.80, 0.28),
-        'border':    hsv(h, s * 0.55, 0.55),
-        'border_hi': hsv(h, s * 0.65, 0.78),
-        'field':     hsv(h, s * 0.75, 0.08),
-        'accent':    hsv(h, min(1.0, 0.30 + s * 0.55), 0.95),
-        'accent_hi': hsv(h, min(1.0, 0.25 + s * 0.50), 1.0),
-        'text':      hsv(h, s * 0.15, 0.98),
-        'dim':       hsv(h, s * 0.35, 0.70),
-        'muted':     hsv(h, s * 0.45, 0.50),
-        'success':   (0.35, 1.00, 0.55),
-        'danger':    (1.00, 0.42, 0.50),
-        'gold':      (1.00, 0.82, 0.30),
-        'silver':    (0.85, 0.90, 0.95),
-        'bronze':    (0.90, 0.55, 0.30),
-    }
-
-def role_color(rid, pal):
-    return {1: pal['gold'], 2: pal['accent'], 3: hsv(0.75, 0.75, 0.95)}.get(rid, pal['dim'])
-
-
-# ═══════════════════════════════════════════════════════════════
-# UI SCALE
-# ═══════════════════════════════════════════════════════════════
-
-def ui_scale():
-    try:
-        s = bui.app.ui_v1.uiscale
-        if s is babase.UIScale.SMALL:
-            return 1.75
-        if s is babase.UIScale.MEDIUM:
-            return 1.30
-        return 1.0
-    except Exception:
-        return 1.0
-
-def win_h():
-    try:
-        s = bui.app.ui_v1.uiscale
-        if s is babase.UIScale.SMALL:
-            return 380
-        if s is babase.UIScale.MEDIUM:
-            return 460
-        return 560
-    except Exception:
-        return 560
-
-
-# ═══════════════════════════════════════════════════════════════
-# API CLIENT
+# 🌐 API CLIENT
 # ═══════════════════════════════════════════════════════════════
 
 class BslifeAPI:
+    """
+    Handles all HTTP requests to the BSLIFE server.
+    Manages cookies, sessions, and POST requests.
+    """
     def __init__(self):
         self.jar = http.cookiejar.CookieJar()
         try:
@@ -330,24 +258,27 @@ class BslifeAPI:
                 ctx = ssl._create_unverified_context()
             except Exception:
                 ctx = None
+        
         handlers = [urllib.request.HTTPCookieProcessor(self.jar)]
         try:
             handlers.append(urllib.request.HTTPSHandler(context=ctx))
         except Exception:
             pass
+        
         self.opener = urllib.request.build_opener(*handlers)
         self.headers = {
-            "User-Agent": "BombSquad/1.7.x (BSLIFE v11)",
+            "User-Agent": "BombSquad/1.7.x (Modded Ally Manager)",
             "Accept": "application/json",
-            "Content-Type": "application/json",
+            "Content-Type": "application/json"
         }
         self.user = None
         self.ally = None
         self.roleid = None
         self.memberid = None
-        self._load()
+        self._load_cookies()
 
-    def _load(self):
+    def _load_cookies(self):
+        """Loads saved cookies from disk to restore session."""
         if not os.path.exists(SESSION_FILE):
             return
         try:
@@ -359,36 +290,38 @@ class BslifeAPI:
                     domain="bslife.ir", domain_specified=True, domain_initial_dot=False,
                     path="/", path_specified=True, secure=True,
                     expires=None, discard=True, comment=None, comment_url=None,
-                    rest={"HttpOnly": None}, rfc2109=False,
+                    rest={"HttpOnly": None}, rfc2109=False
                 )
                 self.jar.set_cookie(c)
             self.user = data.get("user")
-            log(f"Session loaded: {self.user}")
+            log(f"Loaded session for: {self.user}")
         except Exception as e:
-            log(f"Load cookies: {e}")
+            log(f"Load cookies failed: {e}")
 
-    def _save(self):
+    def _save_cookies(self):
+        """Saves current cookies to disk."""
         data = {"cookies": {c.name: c.value for c in self.jar}, "user": self.user}
         try:
             with open(SESSION_FILE, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            log(f"Save cookies: {e}")
+            log(f"Save cookies failed: {e}")
 
     def post(self, path, payload):
+        """Sends a raw POST request and returns the string response."""
         url = BASE_URL + path
         try:
             data = json.dumps(payload).encode("utf-8")
-            ck = self.jar._cookies
-            ck_s = "".join(f"{n}={ck[d][p][n].value}; "
-                          for d in ck for p in ck[d] for n in ck[d][p])
-            h = self.headers.copy()
-            if ck_s:
-                h["Cookie"] = ck_s
-            req = urllib.request.Request(url, data=data, headers=h, method="POST")
+            cookies = self.jar._cookies
+            cookie_str = "".join(f"{n}={cookies[d][p][n].value}; " for d in cookies for p in cookies[d] for n in cookies[d][p])
+            headers = self.headers.copy()
+            if cookie_str:
+                headers["Cookie"] = cookie_str
+            
+            req = urllib.request.Request(url, data=data, headers=headers, method="POST")
             with self.opener.open(req, timeout=20) as resp:
                 result = resp.read().decode("utf-8", errors="replace").strip()
-                self._save()
+                self._save_cookies()
                 return result
         except urllib.error.HTTPError as e:
             return f"__HTTPERROR__:{e.code}"
@@ -396,6 +329,7 @@ class BslifeAPI:
             return f"__ERROR__:{e}"
 
     def post_json(self, path, payload):
+        """Sends a POST request and attempts to parse the response as JSON."""
         t = self.post(path, payload)
         if t in ("3", "", "-1"):
             return t
@@ -407,2158 +341,981 @@ class BslifeAPI:
             return t
 
     def login(self, name, otp):
+        """Attempts to log in the user."""
         r = self.post("/Head.php", {"fu": "login", "n": name, "p": otp})
         if r == "1":
             self.user = name
-            self._save()
-            return True, L("success_load")
-        return False, {"0": "Wrong OTP", "ban": "Banned", "-1": "Server Error"}.get(r, "Unknown")
+            self._save_cookies()
+            return True, L("success_loading")
+        return False, {"0": "Wrong Username/OTP", "ban": "Blocked", "banned": "Banned", "-1": "Server Error"}.get(r, "Unknown Error")
 
     def whoami(self):
+        """Checks if the current session is still valid."""
         r = self.post("/Head.php", {"fu": "load"})
+        if r in ("3", ""):
+            log("Session expired, trying to recover with tk_user...")
+            r = self.post("/Head.php", {"fu": "load"})
         return None if r in ("3", "") else r
 
     def logout(self):
+        """Logs the user out and clears local session data."""
         try:
             self.post("/Head.php", {"fu": "account_logout"})
         except Exception:
             pass
         self.jar.clear()
         if os.path.exists(SESSION_FILE):
-            try:
-                os.remove(SESSION_FILE)
-            except Exception:
-                pass
+            os.remove(SESSION_FILE)
         self.user = None
         self.ally = None
         self.roleid = None
         self.memberid = None
 
-    # Ally endpoints
+    # ─── Ally Endpoints ───
     def ally_status(self): return self.post_json("/post/Ally.php", {"fu": "status"})
     def ally_members(self): return self.post_json("/post/Ally.php", {"fu": "members"})
     def ally_leave(self): return self.post("/post/Ally.php", {"fu": "leave_ally"})
-    def ally_requests(self, t="new"): return self.post_json("/post/Ally.php", {"fu": "get_requests", "type": t, "offset": None})
-    def ally_handle_request(self, rid, mode): return self.post("/post/Ally.php", {"fu": "handle_request", "request": rid, "mode": mode})
-    def ally_change_role(self, mid, rid): return self.post("/post/Ally.php", {"fu": "change_role", "id": mid, "roleid": rid})
-    def ally_change_title(self, mid, t, c): return self.post("/post/Ally.php", {"fu": "change_title", "id": mid, "title": t, "color": c})
+    def ally_requests(self, rtype="new"): return self.post_json("/post/Ally.php", {"fu": "get_requests", "type": rtype, "offset": None})
+    def ally_handle_request(self, req_id, mode): return self.post("/post/Ally.php", {"fu": "handle_request", "request": req_id, "mode": mode})
+    def ally_change_role(self, member_id, roleid): return self.post("/post/Ally.php", {"fu": "change_role", "id": member_id, "roleid": roleid})
+    def ally_change_title(self, member_id, title, color): return self.post("/post/Ally.php", {"fu": "change_title", "id": member_id, "title": title, "color": color})
     def ally_mute(self, target, typ): return self.post("/post/Ally.php", {"fu": "mute_unmute", "target": target, "type": typ})
-    def ally_kick(self, mid): return self.post("/post/Ally.php", {"fu": "delete_member", "id": mid})
+    def ally_kick(self, member_id): return self.post("/post/Ally.php", {"fu": "delete_member", "id": member_id})
     def ally_settings(self): return self.post_json("/post/Ally.php", {"fu": "settings"})
-    def ally_save_setting(self, k, v): return self.post_json("/post/Ally.php", {"fu": "settings", "key": k, "val": v})
+    def ally_save_setting(self, key, val): return self.post_json("/post/Ally.php", {"fu": "settings", "key": key, "val": val})
     def ally_capacity(self): return self.post("/post/Ally.php", {"fu": "capacity"})
-    def ally_chat_history(self, off=None): return self.post_json("/post/Ally.php", {"fu": "chat_history", "offset": off})
-    def ally_chat_send(self, t): return self.post("/post/Ally.php", {"fu": "chat_send", "chat": t})
-    def ally_ranking(self, d=None): return self.post_json("/post/Ally.php", {"fu": "ranking_info", "date": d})
+    def ally_chat_history(self, offset=None): return self.post_json("/post/Ally.php", {"fu": "chat_history", "offset": offset})
+    def ally_chat_send(self, text): return self.post("/post/Ally.php", {"fu": "chat_send", "chat": text})
+    def ally_ranking(self, date=None): return self.post_json("/post/Ally.php", {"fu": "ranking_info", "date": date})
     def ally_vault_status(self): return self.post_json("/post/Ally.php", {"fu": "vault_status"})
-    def ally_vault_add(self, a): return self.post("/post/Ally.php", {"fu": "vault_add", "amount": a})
-    def ally_vault_clear(self, t): return self.post("/post/Ally.php", {"fu": "vault_clear", "type": t})
-    def ally_vault_news(self, off=None): return self.post_json("/post/Ally.php", {"fu": "vault_news", "offset": off})
-    def ally_vault_shares(self, tid): return self.post_json("/post/Ally.php", {"fu": "vault_shares", "id": tid})
+    def ally_vault_add(self, amount): return self.post("/post/Ally.php", {"fu": "vault_add", "amount": amount})
+    def ally_vault_clear(self, typ): return self.post("/post/Ally.php", {"fu": "vault_clear", "type": typ})
+    def ally_vault_news(self, offset=None): return self.post_json("/post/Ally.php", {"fu": "vault_news", "offset": offset})
+    def ally_vault_shares(self, trans_id): return self.post_json("/post/Ally.php", {"fu": "vault_shares", "id": trans_id})
     def ally_enrol(self): return self.post_json("/post/Ally.php", {"fu": "enrol_settings"})
-    def ally_set_enrol(self, k, v): return self.post_json("/post/Ally.php", {"fu": "enrol_settings", "key": k, "val": v})
-    def ally_news(self, off=None): return self.post_json("/post/Ally.php", {"fu": "news", "offset": off})
+    def ally_set_enrol(self, key, val): return self.post_json("/post/Ally.php", {"fu": "enrol_settings", "key": key, "val": val})
+    def ally_news(self, offset=None): return self.post_json("/post/Ally.php", {"fu": "news", "offset": offset})
     def create_status(self): return self.post_json("/post/AllyCreate.php", {"fu": "status"})
-    def create_ally(self, n, c=0): return self.post_json("/post/AllyCreate.php", {"fu": "create", "name": n, "confirm": c})
-    def list_allies(self, s="", o="rank"): return self.post_json("/post/AllyList.php", {"fu": "get_allys", "offset": None, "order": o, "search": s, "filter": "[]"})
-    def join_ally(self, aid): return self.post("/post/AllyList.php", {"fu": "join_ally", "ally": aid})
+    def create_ally(self, name, confirm=0): return self.post_json("/post/AllyCreate.php", {"fu": "create", "name": name, "confirm": confirm})
+    def list_allies(self, search="", order="rank"): return self.post_json("/post/AllyList.php", {"fu": "get_allys", "offset": None, "order": order, "search": search, "filter": "[]"})
+    def join_ally(self, ally_id): return self.post("/post/AllyList.php", {"fu": "join_ally", "ally": ally_id})
 
 
-class Net:
+class Network:
+    """Helper class to run network requests in background threads to prevent game freezing."""
     @classmethod
-    def fetch(cls, api, m, args=(), cb=None):
+    def fetch(cls, api, method_name, args=(), callback=None):
         def worker():
             try:
-                r = getattr(api, m)(*args)
+                result = getattr(api, method_name)(*args)
             except Exception as e:
-                r = {"error": str(e)}
-            if cb:
+                result = {"error": str(e)}
+            if callback:
                 try:
-                    bui.pushcall(MyCall(cb, r), from_other_thread=True)
+                    bui.pushcall(MyCall(callback, result), from_other_thread=True)
                 except Exception as e:
-                    log(f"Pushcall: {e}")
+                    log(f"Pushcall error: {e}")
         threading.Thread(target=worker, daemon=True).start()
 
-
 # ═══════════════════════════════════════════════════════════════
-# UI PRIMITIVES
+# 🎨 SKIN & THEMES (The Visual Engine)
 # ═══════════════════════════════════════════════════════════════
 
-class RoundedRect:
-    """4 rectangles + 4 circle corners = rounded rectangle."""
-    def __init__(self, parent, x, y, w, h, r, color):
+THEMES: Dict[str, Dict[str, Any]] = {
+    # ⭐ Valhalla (Default) - Obsidian Black, Blood Red, and Gold.
+    'Valhalla': dict(a=(0.95, 0.25, 0.15), b=(0.85, 0.65, 0.10), mode='wave', tex=('star', 'circleSoft'), dir=1),
+    
+    # Other themes for cycling
+    'Aurora': dict(a=(0.16, 0.38, 0.92), b=(0.16, 0.75, 0.35), mode='wave', tex=('circleSoft', 'star'), dir=1),
+    'Neon Pink': dict(a=(1.0, 0.12, 0.62), b=(0.55, 0.15, 1.0), mode='wave', tex=('heart', 'star', 'circleSoft'), dir=1),
+    'Lava': dict(a=(1.0, 0.28, 0.05), b=(0.75, 0.05, 0.12), mode='wave', tex=('star', 'circleSoft'), dir=1),
+    'Ocean': dict(a=(0.05, 0.40, 0.95), b=(0.02, 0.78, 0.80), mode='wave', tex=('circleOutline', 'circleSoft'), dir=1),
+    'Toxic': dict(a=(0.25, 0.95, 0.12), b=(0.75, 0.90, 0.10), mode='wave', tex=('circleSoft', 'star'), dir=1),
+    'Galaxy': dict(a=(0.40, 0.10, 0.85), b=(0.08, 0.15, 0.55), mode='wave', tex=('star', 'star', 'circleSoft'), dir=1),
+    'Candy': dict(a=(1.0, 0.55, 0.80), b=(0.50, 0.80, 1.0), mode='wave', tex=('heart', 'circleSoft'), dir=1),
+    'Frost': dict(a=(0.55, 0.85, 1.0), b=(0.85, 0.93, 1.0), mode='wave', tex=('circleSoft', 'star'), dir=-1),
+    'Sunset': dict(a=(1.0, 0.35, 0.25), b=(0.65, 0.20, 0.90), mode='wave', tex=('circleSoft', 'star'), dir=1),
+    'Matrix': dict(a=(0.05, 0.80, 0.25), b=(0.0, 0.45, 0.15), mode='wave', tex=('circleSoft',), dir=-1),
+    'Midnight': dict(a=(0.08, 0.10, 0.30), b=(0.22, 0.12, 0.48), mode='wave', tex=('star', 'circleSoft'), dir=1),
+    'Rainbow': dict(a=(1.0, 0.2, 0.2), b=(0.2, 0.2, 1.0), mode='rainbow', tex=('star', 'heart', 'circleSoft'), dir=1),
+}
+
+THEME_ORDER = list(THEMES.keys())
+
+
+def _get_theme(name: str) -> Dict[str, Any]:
+    th = THEMES.get(name)
+    if th is not None:
+        return th
+    return THEMES['Valhalla']
+
+
+def _theme_rgb(theme, elapsed: float, speed: float = 1.0):
+    """Calculates the dynamic RGB color based on the current theme and time."""
+    period = 4.0 / max(0.25, speed)
+    if theme.get('mode') == 'rainbow':
+        h = (elapsed / (period * 2.5)) % 1.0
+        s, v = 0.80, 0.95
+    else:
+        phase = (elapsed % period) / period
+        t = (1 - math.cos(phase * 2 * math.pi)) / 2
+        h_a, s_a, v_a = colorsys.rgb_to_hsv(*theme['a'])
+        h_b, s_b, v_b = colorsys.rgb_to_hsv(*theme['b'])
+        
+        # Interpolate Hue safely (shortest path)
+        dh = h_b - h_a
+        if dh > 0.5:
+            dh -= 1.0
+        elif dh < -0.5:
+            dh += 1.0
+            
+        h = (h_a + dh * t) % 1.0
+        s = s_a + (s_b - s_a) * t
+        v = v_a + (v_b - v_a) * t
+        
+    # Slight pulse in brightness
+    v = min(1.0, v * (0.94 + 0.06 * math.sin(elapsed * 2.3)))
+    return colorsys.hsv_to_rgb(h, s, v)
+
+
+def _accent(rgb, sat: float = 0.55, val: float = 0.88):
+    h, s, _v = colorsys.rgb_to_hsv(*rgb)
+    return colorsys.hsv_to_rgb(h, min(1.0, 0.25 + s * sat), val)
+
+
+def _light(rgb, k: float = 0.5):
+    h, s, _v = colorsys.rgb_to_hsv(*rgb)
+    return colorsys.hsv_to_rgb(h, s * k, 1.0)
+
+
+def _hsv(h: float, s: float, v: float):
+    return colorsys.hsv_to_rgb(h % 1.0, max(0.0, min(1.0, s)), max(0.0, min(1.0, v)))
+
+
+def _palette(rgb) -> Dict[str, Any]:
+    """
+    Generates the color palette for the UI elements based on the theme's core color.
+    Note: For Valhalla, we specifically force very dark backgrounds to make the gold pop.
+    """
+    h, s, _v = colorsys.rgb_to_hsv(*rgb)
+    s = min(1.0, 0.15 + s * 0.8)
+    
+    return dict(
+        body=_hsv(h, s * 0.9, 0.06),      # Deep Obsidian Black
+        card=_hsv(h, s * 0.8, 0.12),      # Dark brown/black
+        head=_hsv(h, s * 0.8, 0.18),      # Slightly lighter header
+        field=_hsv(h, s * 0.8, 0.04),     # Very dark input fields
+        edge=_hsv(h, s * 0.65, 0.85),     # Bright glowing gold border
+        edge_dim=_hsv(h, s * 0.65, 0.55), # Dimmer gold for inner cards
+        accent=_accent(rgb),
+        light=_light(rgb, 0.45),
+        text=_light(rgb, 0.16)            # Parchment/Khaki text
+    )
+
+
+def _kind_colors(pal):
+    """Maps palette entries to specific UI elements."""
+    return {
+        'body': (pal['body'], pal['edge']),
+        'card': (pal['card'], pal['edge_dim']),
+        'head': (pal['head'], pal['edge']),
+        'field': (pal['field'], pal['edge_dim'])
+    }
+
+
+def _join_color(rgb):
+    h, s, _v = colorsys.rgb_to_hsv(*rgb)
+    return _hsv(h, 0.35 + s * 0.7, 1.0)
+
+
+def _danger_color(rgb):
+    h, s, _v = colorsys.rgb_to_hsv(*rgb)
+    return _hsv(h, 0.3 + s * 0.5, 0.58)
+
+
+class _RRect:
+    """
+    Draws a rounded rectangle by combining 3 standard white rectangles and 4 circle textures.
+    This simulates a true rounded rect without needing a custom texture.
+    """
+    def __init__(self, parent, x, y, w, h, r, color=(1, 1, 1)) -> None:
         r = max(1.0, min(r, w / 2.0, h / 2.0))
         white = bui.gettexture('white')
         disc = bui.gettexture('circle')
-        self.parts = []
+        self.parts: List[Any] = []
+
         def add(px, py, pw, ph, tex):
-            try:
-                self.parts.append(bui.imagewidget(
-                    parent=parent, position=(px, py), size=(pw, ph),
-                    texture=tex, color=color, opacity=1.0,
-                ))
-            except Exception:
-                pass
+            self.parts.append(bui.imagewidget(
+                parent=parent, position=(px, py), size=(pw, ph),
+                texture=tex, color=color, opacity=1.0
+            ))
+
+        # Central horizontal and vertical bars
         add(x + r, y, w - 2 * r, h, white)
         add(x, y + r, r, h - 2 * r, white)
         add(x + w - r, y + r, r, h - 2 * r, white)
+        
+        # 4 corners
         tile = 2 * r / 0.97
-        for cx, cy in ((x + r, y + r), (x + w - r, y + r),
-                       (x + r, y + h - r), (x + w - r, y + h - r)):
+        for cx, cy in ((x + r, y + r), (x + w - r, y + r), (x + r, y + h - r), (x + w - r, y + h - r)):
             add(cx - tile / 2, cy - tile / 2, tile, tile, disc)
 
-    def recolor(self, color):
+    def recolor(self, rgb) -> None:
         for p in self.parts:
-            try:
-                bui.imagewidget(edit=p, color=color)
-            except Exception:
-                pass
-
-    def delete(self):
-        for p in self.parts:
-            try:
-                p.delete()
-            except Exception:
-                pass
+            bui.imagewidget(edit=p, color=rgb)
 
 
-class Card:
-    """Card with outer edge + inner fill."""
-    def __init__(self, parent, x, y, w, h, r, bw=2.0):
-        self.edge = RoundedRect(parent, x, y, w, h, r, (0, 0, 0))
-        self.fill = RoundedRect(parent, x + bw, y + bw,
-                                w - 2 * bw, h - 2 * bw, max(1.0, r - bw), (0, 0, 0))
+class _Card:
+    """
+    A UI Card with a glowing border.
+    It's made of two RRect: a slightly larger one for the border, and a smaller inner one for the fill.
+    """
+    def __init__(self, parent, x, y, w, h, r, bw: float = 1.6) -> None:
+        self.edge = _RRect(parent, x, y, w, h, r)
+        self.fill = _RRect(parent, x + bw, y + bw, w - 2 * bw, h - 2 * bw, max(1.0, r - bw))
 
-    def recolor(self, edge, fill):
+    def recolor(self, edge, fill) -> None:
         self.edge.recolor(edge)
         self.fill.recolor(fill)
 
-    def delete(self):
-        self.edge.delete()
-        self.fill.delete()
+
+def _rounded_rim(w, h, radius, inset, spacing=18.0):
+    """
+    Calculates points along the rounded border to place glowing particles.
+    """
+    rr = max(2.0, radius - inset)
+    x0, x1, y0, y1 = inset, w - inset, inset, h - inset
+    lh = (x1 - x0) - 2 * rr
+    lv = (y1 - y0) - 2 * rr
+    arc = math.pi * rr / 2
+    total = 2 * lh + 2 * lv + 4 * arc
+    n = max(24, int(round(total / spacing)))
+    pts = []
+    
+    for k in range(n):
+        d = total * k / n
+        if d < lh:
+            p = (x0 + rr + d, y0)
+        else:
+            d -= lh
+            if d < arc:
+                a = -math.pi / 2 + d / rr
+                p = (x1 - rr + rr * math.cos(a), y0 + rr + rr * math.sin(a))
+            else:
+                d -= arc
+                if d < lv:
+                    p = (x1, y0 + rr + d)
+                else:
+                    d -= lv
+                    if d < arc:
+                        a = d / rr
+                        p = (x1 - rr + rr * math.cos(a), y1 - rr + rr * math.sin(a))
+                    else:
+                        d -= arc
+                        if d < lh:
+                            p = (x1 - rr - d, y1)
+                        else:
+                            d -= lh
+                            if d < arc:
+                                a = math.pi / 2 + d / rr
+                                p = (x0 + rr + rr * math.cos(a), y1 - rr + rr * math.sin(a))
+                            else:
+                                d -= arc
+                                if d < lv:
+                                    p = (x0, y1 - rr - d)
+                                else:
+                                    d -= lv
+                                    a = math.pi + d / rr
+                                    p = (x0 + rr + rr * math.cos(a), y0 + rr + rr * math.sin(a))
+        pts.append((p[0] / w, p[1] / h))
+    return pts
 
 
-class Badge:
-    """Pill-shaped colored badge."""
-    def __init__(self, parent, x, y, w, h, color):
-        self.bg = RoundedRect(parent, x, y, w, h, h / 2.0, color)
-        self.color = color
+class _FXLayer:
+    """
+    The particle system and animation layer for the UI.
+    Draws floating orbs, twinkling stars, shooting stars, and pulsing rings.
+    """
+    N_PART = 14
+    N_ORB = 5
+    N_TWINKLE = 16
+    N_RING = 3
+    N_BURST = 14
+    TAIL = 0.20
 
-    def recolor(self, c):
-        self.bg.recolor(c)
-
-    def delete(self):
-        self.bg.delete()
-
-
-class Gradient:
-    """Vertical gradient made of layered rects."""
-    def __init__(self, parent, x, y, w, h, c_top, c_bot, layers=8):
-        self.parts = []
-        for i in range(layers):
-            t = i / max(1, layers - 1)
-            c = tuple(c_top[j] + (c_bot[j] - c_top[j]) * t for j in range(3))
-            try:
-                p = bui.imagewidget(
-                    parent=parent, position=(x, y + i * h / layers),
-                    size=(w, h / layers + 1),
-                    texture=bui.gettexture('white'), color=c, opacity=1.0,
-                )
-                self.parts.append(p)
-            except Exception:
-                pass
-
-    def recolor(self, c_top, c_bot):
-        n = len(self.parts)
-        for i, p in enumerate(self.parts):
-            t = i / max(1, n - 1)
-            c = tuple(c_top[j] + (c_bot[j] - c_top[j]) * t for j in range(3))
-            try:
-                bui.imagewidget(edit=p, color=c)
-            except Exception:
-                pass
-
-    def delete(self):
-        for p in self.parts:
-            try:
-                p.delete()
-            except Exception:
-                pass
-
-
-# ═══════════════════════════════════════════════════════════════
-# PARTICLE BACKGROUND
-# ═══════════════════════════════════════════════════════════════
-
-class ParticleField:
-    """Animated particles (orbs + stars) floating in background."""
-    def __init__(self, parent, W, H):
-        self.W, self.H = W, H
-        rnd = random.Random(3)
+    def __init__(self, root, width, height, level, theme, halos=None, rim=None) -> None:
+        self._w = float(width)
+        self._h = float(height)
+        self._level = level
+        self._theme = theme
+        self._n = 0
+        self._rnd = random.Random()
+        self._last_pulse = -9.0
+        w, h = self._w, self._h
+        rnd = random.Random(7)
+        
         soft = bui.gettexture('circleSoft')
         star = bui.gettexture('star')
-        self.orbs = []
-        for i in range(6):
-            w = bui.imagewidget(
-                parent=parent, position=(0, 0),
-                size=(80, 80), texture=soft, color=(1, 1, 1), opacity=0.0,
-            )
-            self.orbs.append({
-                'w': w,
-                'x': rnd.uniform(0.15, 0.85) * W,
-                'y': rnd.uniform(0.20, 0.80) * H,
-                'r': rnd.uniform(40, 90),
-                'fx': rnd.uniform(0.10, 0.28),
-                'fy': rnd.uniform(0.08, 0.20),
-                'ph': rnd.uniform(0, 6.28),
-            })
-        self.stars = []
-        for i in range(14):
-            w = bui.imagewidget(
-                parent=parent, position=(0, 0),
-                size=(8, 8), texture=star, color=(1, 1, 1), opacity=0.0,
-            )
-            self.stars.append({
-                'w': w,
-                'x': rnd.uniform(0.05, 0.95) * W,
-                'y': rnd.uniform(0.05, 0.95) * H,
-                's': rnd.uniform(4, 8),
-                'f': rnd.uniform(0.5, 1.6),
-                'ph': rnd.uniform(0, 6.28),
-                'last_op': -1.0,
-            })
 
-    def tick(self, elapsed, color, pal):
-        # Orbs
-        for o in self.orbs:
-            x = o['x'] + math.sin(elapsed * o['fx'] + o['ph']) * 40
-            y = o['y'] + math.cos(elapsed * o['fy'] + o['ph']) * 25
-            sz = o['r'] * (1 + 0.06 * math.sin(elapsed * 0.9 + o['ph']))
+        def img(tex, size=(10, 10)):
+            return bui.imagewidget(parent=root, position=(0, 0), size=size, texture=tex, color=(1, 1, 1), opacity=0.0)
+
+        # 1. Floating Orbs (large, soft glowing balls in background)
+        self._orbs: List[Dict[str, Any]] = []
+        for i in range(self.N_ORB):
+            self._orbs.append(dict(
+                x=rnd.uniform(0.15, 0.85) * w, y=rnd.uniform(0.2, 0.8) * h,
+                r=rnd.uniform(50, 100), fx=rnd.uniform(0.12, 0.3),
+                fy=rnd.uniform(0.1, 0.25), ph=rnd.uniform(0, 6.28), w=img(soft)
+            ))
+        
+        # 2. Twinkling Stars (small, bright dots that fade in and out)
+        self._twk: List[Dict[str, Any]] = []
+        for i in range(self.N_TWINKLE):
+            self._twk.append(dict(
+                x=rnd.uniform(0.06, 0.94) * w, y=rnd.uniform(0.08, 0.92) * h,
+                s=rnd.uniform(5, 10), f=rnd.uniform(0.6, 1.8),
+                ph=rnd.uniform(0, 6.28), op=-1.0, w=img(star)
+            ))
+
+        # 3. Glows and Shines
+        self._glow = bui.imagewidget(parent=root, position=(w * 0.12, h - 80), size=(w * 0.76, 90), texture=soft, color=(1, 1, 1), opacity=0.0)
+        self._shine = bui.imagewidget(parent=root, position=(-80, 6), size=(46, h - 12), texture=bui.gettexture('softRectVertical'), color=(1, 1, 1), opacity=0.0)
+        self._tshine = bui.imagewidget(parent=root, position=(-80, h - 62), size=(30, 46), texture=bui.gettexture('softRectVertical'), color=(1, 1, 1), opacity=0.0)
+        self._tshine_on = False
+
+        # 4. Halos (custom pulsing rings around specific UI elements)
+        self._halos: List[Dict[str, Any]] = []
+        for cx, cy, sz in (halos or []):
+            self._halos.append(dict(x=cx, y=cy, s=sz, w=img(soft, (sz, sz))))
+
+        # 5. Rim Dots (dots that travel along the border of the UI)
+        self._dots: List[Dict[str, Any]] = []
+        for i, (u, v) in enumerate(rim or []):
+            x, y = u * w, v * h
+            bloom = None
+            if i % 2 == 0:
+                bloom = bui.imagewidget(parent=root, position=(x - 9, y - 9), size=(18, 18), texture=soft, color=(1, 1, 1), opacity=0.0)
+            self._dots.append(dict(x=x, y=y, op=-1.0, bloom=bloom, w=None))
+        for d in self._dots:
+            d['w'] = bui.imagewidget(parent=root, position=(d['x'] - 3, d['y'] - 3), size=(6, 6), texture=soft, color=(1, 1, 1), opacity=0.0)
+
+        # 6. Floating Particles (dust motes)
+        self._parts: List[Dict[str, Any]] = []
+        for i in range(self.N_PART):
+            self._parts.append(dict(
+                x=rnd.uniform(0.07, 0.93) * w, speed=rnd.uniform(0.035, 0.10), off=rnd.random(),
+                amp=rnd.uniform(4, 18), freq=rnd.uniform(0.6, 1.8), ph=rnd.uniform(0, 6.28),
+                size=rnd.uniform(9, 22), maxop=rnd.uniform(0.35, 0.8), tex_i=i, w=img(soft, (12, 12))
+            ))
+
+        # 7. Shooting Stars
+        self._shoot_w = [img(star, (14, 14)), img(soft, (10, 10)), img(soft, (8, 8)), img(soft, (6, 6))]
+        self._shoot: Optional[Dict[str, float]] = None
+        self._next_shoot = 3.0
+
+        # 8. Rings (expanding circles on pulse)
+        self._rings = [dict(t0=None, x=0.0, y=0.0, w=bui.imagewidget(parent=root, position=(0, 0), size=(20, 20), texture=bui.gettexture('circleOutline'), color=(1, 1, 1), opacity=0.0)) for _ in range(self.N_RING)]
+        
+        # 9. Bursts (explosions of particles on burst)
+        self._bursts = [dict(t0=None, x=0.0, y=0.0, vx=0.0, vy=0.0, col=(1, 1, 1), w=img(star if i % 2 else soft, (12, 12))) for i in range(self.N_BURST)]
+        
+        self.set_theme(theme)
+        self.set_level(level)
+
+    def set_theme(self, theme) -> None:
+        self._theme = theme
+        texs = theme.get('tex') or ('circleSoft',)
+        for p in self._parts:
             try:
-                bui.imagewidget(
-                    edit=o['w'], position=(x - sz / 2, y - sz / 2),
-                    size=(sz, sz), color=pal['accent'],
-                    opacity=0.04 + 0.04 * (1 + math.sin(elapsed * 0.6 + o['ph'])) / 2,
-                )
+                bui.imagewidget(edit=p['w'], texture=bui.gettexture(texs[p['tex_i'] % len(texs)]))
             except Exception:
                 pass
-        # Stars
-        for s in self.stars:
-            k = max(0.0, math.sin(elapsed * s['f'] + s['ph'])) ** 3
-            op = 0.05 + 0.7 * k
-            if abs(op - s['last_op']) > 0.05:
-                sz = s['s'] * (0.7 + 0.4 * k)
-                try:
-                    bui.imagewidget(
-                        edit=s['w'], position=(s['x'] - sz / 2, s['y'] - sz / 2),
-                        size=(sz, sz), color=pal['accent'], opacity=op,
-                    )
-                    s['last_op'] = op
-                except Exception:
-                    pass
 
-    def recolor(self, pal):
-        pass
+    def _hi_widgets(self):
+        wl = [o['w'] for o in self._orbs] + [t['w'] for t in self._twk]
+        wl += [hh['w'] for hh in self._halos] + list(self._shoot_w)
+        wl += [d['bloom'] for d in self._dots if d['bloom'] is not None]
+        wl.append(self._tshine)
+        return wl
 
-    def delete(self):
-        for o in self.orbs:
+    def _active_count(self) -> int:
+        return 0 if self._level <= 0 else (6 if self._level == 1 else self.N_PART)
+
+    def set_level(self, level: int) -> None:
+        self._level = level
+        hide = []
+        if level <= 0:
+            hide += self._hi_widgets() + [self._glow, self._shine]
+            hide += [p['w'] for p in self._parts] + [d['w'] for d in self._dots]
+            hide += [r['w'] for r in self._rings] + [b['w'] for b in self._bursts]
+            self._shoot = None
+            for r in self._rings:
+                r['t0'] = None
+            for b in self._bursts:
+                b['t0'] = None
+        else:
+            if level < 2:
+                hide += self._hi_widgets()
+                self._shoot = None
+                self._tshine_on = False
+                for b in self._bursts:
+                    b['t0'] = None
+                hide += [b['w'] for b in self._bursts]
+            hide += [p['w'] for p in self._parts[self._active_count():]]
+            
+        for d in self._dots:
+            d['op'] = -1.0
+        for t in self._twk:
+            t['op'] = -1.0
+        for wd in hide:
             try:
-                o['w'].delete()
+                bui.imagewidget(edit=wd, opacity=0.0)
             except Exception:
                 pass
-        for s in self.stars:
-            try:
-                s['w'].delete()
-            except Exception:
-                pass
 
+    def pulse(self, x=None, y=None) -> None:
+        if self._level <= 0:
+            return
+        now = time.time() - _FX_T0
+        if now - self._last_pulse < 0.35:
+            return
+        self._last_pulse = now
+        ring = min(self._rings, key=lambda r: -1.0 if r['t0'] is None else r['t0'])
+        ring.update(t0=now, x=self._w / 2 if x is None else x, y=self._h / 2 if y is None else y)
+
+    def burst(self, x=None, y=None) -> None:
+        if self._level < 2:
+            return
+        now = time.time() - _FX_T0
+        cx = self._w / 2 if x is None else x
+        cy = self._h * 0.6 if y is None else y
+        rnd = self._rnd
+        for b in self._bursts:
+            a = rnd.uniform(0, 6.283)
+            sp = rnd.uniform(70, 200)
+            b.update(t0=now, x=cx, y=cy, vx=math.cos(a) * sp, vy=math.sin(a) * sp, col=colorsys.hsv_to_rgb(rnd.random(), 0.55, 1.0))
+
+    def tick(self, elapsed: float, rgb, speed: float) -> None:
+        if self._level <= 0:
+            return
+        self._n += 1
+        n = self._n
+        w, h = self._w, self._h
+        hi = self._level >= 2
+        light = _light(rgb, 0.45)
+        pulse = (1 + math.sin(elapsed * 1.6 * speed)) / 2
+
+        # Glows
+        bui.imagewidget(edit=self._glow, color=light, opacity=0.12 + 0.22 * pulse)
+        sx = ((elapsed * 0.13 * speed) % 1.6 - 0.3) * w
+        bui.imagewidget(edit=self._shine, position=(sx, 6), opacity=0.07)
+
+        # Rim Dots
+        if n % (2 if hi else 3) == 0:
+            cnt = len(self._dots)
+            base = 0.30 + 0.10 * pulse
+            h1 = (elapsed * 0.10 * speed) % 1.0
+            h2 = (h1 + 0.5) % 1.0
+            recolor = (n % 12 == 0)
+            for i, d in enumerate(self._dots):
+                t = i / cnt
+                k = 0.0
+                for head in (h1, h2):
+                    dist = (head - t) % 1.0
+                    if dist < self.TAIL:
+                        k = max(k, (1.0 - dist / self.TAIL) ** 1.6)
+                op = base + (0.98 - base) * k
+                if k > 0.0 or abs(op - d['op']) > 0.02 or recolor:
+                    sz = 6.0 + 5.0 * k
+                    col = tuple(c + (1.0 - c) * 0.75 * k for c in light)
+                    bui.imagewidget(edit=d['w'], position=(d['x'] - sz / 2, d['y'] - sz / 2), size=(sz, sz), color=col, opacity=op)
+                    if hi and d['bloom'] is not None:
+                        bs_ = 16.0 + 16.0 * k
+                        bui.imagewidget(edit=d['bloom'], position=(d['x'] - bs_ / 2, d['y'] - bs_ / 2), size=(bs_, bs_), color=light, opacity=0.05 + 0.30 * k)
+                    d['op'] = op
+
+        # Floating Particles
+        direction = self._theme.get('dir', 1)
+        span = h - 2 * 17 - 20
+        for p in self._parts[:self._active_count()]:
+            prog = (p['off'] + elapsed * p['speed'] * speed) % 1.0
+            if direction < 0:
+                prog = 1.0 - prog
+            sz = p['size'] * (0.75 + 0.25 * math.sin(elapsed * 2 + p['ph']))
+            x = p['x'] + math.sin(elapsed * p['freq'] + p['ph']) * p['amp']
+            y = 17 + 10 + prog * span
+            op = math.sin(math.pi * min(1.0, max(0.0, prog))) * p['maxop']
+            bui.imagewidget(edit=p['w'], position=(x - sz / 2, y - sz / 2), size=(sz, sz), opacity=op, color=light)
+
+        # Rings
+        for r in self._rings:
+            if r['t0'] is None:
+                continue
+            age = elapsed - r['t0']
+            if age >= 1.2:
+                r['t0'] = None
+                bui.imagewidget(edit=r['w'], opacity=0.0)
+                continue
+            f = age / 1.2
+            sz = 30 + f * max(w, h) * 0.95
+            bui.imagewidget(edit=r['w'], position=(r['x'] - sz / 2, r['y'] - sz / 2), size=(sz, sz), color=light, opacity=0.65 * (1 - f) ** 1.5)
+
+        if not hi:
+            return
+
+        # Orbs & Twinkles (High detail only)
+        if n % 2 == 0:
+            for i, o in enumerate(self._orbs):
+                x = o['x'] + math.sin(elapsed * o['fx'] + o['ph']) * 45
+                y = o['y'] + math.cos(elapsed * o['fy'] + o['ph']) * 30
+                sz = o['r'] * (1 + 0.08 * math.sin(elapsed * 0.9 + o['ph']))
+                hh, ss, _vv = colorsys.rgb_to_hsv(*light)
+                col = colorsys.hsv_to_rgb((hh + 0.07 * i) % 1.0, min(1.0, ss + 0.3), 1.0)
+                bui.imagewidget(edit=o['w'], position=(x - sz / 2, y - sz / 2), size=(sz, sz), color=col, opacity=0.05 + 0.05 * (1 + math.sin(elapsed * 0.6 + o['ph'])) / 2)
+            for t in self._twk:
+                k = max(0.0, math.sin(elapsed * t['f'] + t['ph'])) ** 3
+                op = 0.05 + 0.75 * k
+                if abs(op - t['op']) > 0.04:
+                    sz = t['s'] * (0.7 + 0.5 * k)
+                    bui.imagewidget(edit=t['w'], position=(t['x'] - sz / 2, t['y'] - sz / 2), size=(sz, sz), color=light, opacity=op)
+                    t['op'] = op
+
+        # Halos
+        for i, hl in enumerate(self._halos):
+            ph = math.sin(elapsed * 2.2 * speed + i * 1.3)
+            sz = hl['s'] * (1 + 0.10 * ph)
+            bui.imagewidget(edit=hl['w'], position=(hl['x'] - sz / 2, hl['y'] - sz / 2), size=(sz, sz), color=light, opacity=0.10 + 0.14 * (1 + ph) / 2)
+
+        # Top Shine (sweeping light across the header)
+        cyc = ((elapsed * speed) % 7.0) / 7.0
+        if cyc < 0.22:
+            f = cyc / 0.22
+            bui.imagewidget(edit=self._tshine, position=(w * 0.2 + f * w * 0.6, h - 62), color=(1, 1, 1), opacity=0.30 * math.sin(math.pi * f))
+            self._tshine_on = True
+        elif self._tshine_on:
+            bui.imagewidget(edit=self._tshine, opacity=0.0)
+            self._tshine_on = False
+
+        # Shooting Stars
+        sh = self._shoot
+        if sh is None:
+            if elapsed >= self._next_shoot:
+                rn = self._rnd
+                self._shoot = dict(t0=elapsed, x=rn.uniform(0.08, 0.5) * w, y=rn.uniform(0.7, 0.95) * h, vx=rn.uniform(260, 340), vy=-rn.uniform(120, 190))
+        else:
+            age = elapsed - sh['t0']
+            if age > 1.0:
+                for wd in self._shoot_w:
+                    bui.imagewidget(edit=wd, opacity=0.0)
+                self._shoot = None
+                self._next_shoot = elapsed + self._rnd.uniform(5.0, 10.0)
+            else:
+                for j, wd in enumerate(self._shoot_w):
+                    a = age - 0.05 * j
+                    if a < 0:
+                        continue
+                    x = sh['x'] + sh['vx'] * a
+                    y = sh['y'] + sh['vy'] * a
+                    sz = (14, 10, 8, 6)[j]
+                    bui.imagewidget(edit=wd, position=(x - sz / 2, y - sz / 2), color=light, opacity=(1 - age) * (0.95, 0.55, 0.35, 0.2)[j])
+
+        # Bursts
+        for b in self._bursts:
+            if b['t0'] is None:
+                continue
+            age = elapsed - b['t0']
+            if age >= 1.1:
+                b['t0'] = None
+                bui.imagewidget(edit=b['w'], opacity=0.0)
+                continue
+            x = b['x'] + b['vx'] * age
+            y = b['y'] + b['vy'] * age - 70.0 * age * age
+            sz = 16 * (1 - 0.4 * age / 1.1)
+            bui.imagewidget(edit=b['w'], position=(x - sz / 2, y - sz / 2), size=(sz, sz), color=b['col'], opacity=0.9 * (1 - age / 1.1) ** 1.2)
+
+
+class _Skin:
+    """Manages the UI cards and the FX layer."""
+    def __init__(self, root, w, h, theme, level, cards, halos=None, radius=18.0) -> None:
+        self._items: List[Tuple[_Card, str]] = []
+        self._items.append((_Card(root, 0, 0, w, h, radius, bw=2.0), 'body'))
+        for x, y, cw, ch, r, kind in cards:
+            self._items.append((_Card(root, x, y, cw, ch, r), kind))
+        self.fx = _FXLayer(root, w, h, level, theme, halos, rim=_rounded_rim(w, h, radius, 5.0))
+        self.pal: Dict[str, Any] = _palette(theme['a'])
+        self.recolor(theme['a'])
+
+    def recolor(self, rgb) -> None:
+        pal = _palette(rgb)
+        self.pal = pal
+        kinds = _kind_colors(pal)
+        for card, kind in self._items:
+            fill, edge = kinds[kind]
+            card.recolor(edge, fill)
+
+
+def _scale() -> float:
+    """Calculates the UI scale based on screen size."""
+    ui = bui.app.ui_v1.uiscale
+    return 1.7 if ui is bui.UIScale.SMALL else 1.3 if ui is bui.UIScale.MEDIUM else 1.0
+
+
+def _win_h() -> int:
+    """Calculates the window height based on screen size."""
+    ui = bui.app.ui_v1.uiscale
+    return 360 if ui is bui.UIScale.SMALL else 440 if ui is bui.UIScale.MEDIUM else 520
 
 # ═══════════════════════════════════════════════════════════════
-# SPINNER (loading indicator)
+# 🏗️ BASE WINDOW FRAMEWORK
 # ═══════════════════════════════════════════════════════════════
 
-class Spinner:
-    def __init__(self, parent, x, y, size=28, color=(1, 1, 1)):
-        self.w = bui.imagewidget(
-            parent=parent, position=(x - size / 2, y - size / 2),
-            size=(size, size), texture=bui.gettexture('circleOutline'),
-            color=color, opacity=0.9,
-        )
-        self.color = color
-
-    def set_color(self, c):
-        try:
-            bui.imagewidget(edit=self.w, color=c)
-        except Exception:
-            pass
-
-    def delete(self):
-        try:
-            self.w.delete()
-        except Exception:
-            pass
+_top: Any = None
+_api: Any = None
+_is_opening = False
+_NOSEL = object()
 
 
-# ═══════════════════════════════════════════════════════════════
-# TOAST NOTIFICATIONS
-# ═══════════════════════════════════════════════════════════════
+class _Win:
+    """
+    The base class for all windows.
+    Handles the main UI container, theme colors, and the animation loop.
+    """
+    FX = False
 
-class ToastStack:
-    _toasts = []
-    _y0 = None
-
-    @classmethod
-    def push(cls, text, kind='info', duration=2.4):
-        color_map = {
-            'info': (0.30, 0.70, 1.00),
-            'success': (0.30, 0.95, 0.55),
-            'error': (1.00, 0.35, 0.40),
-            'warn': (1.00, 0.75, 0.20),
-        }
-        color = color_map.get(kind, color_map['info'])
-        icon_map = {'info': 'ℹ', 'success': '✓', 'error': '✕', 'warn': '!'}
-        icon = icon_map.get(kind, 'ℹ')
-        try:
-            stack = bui.get_special_widget('overlay_stack')
-            try:
-                sz = stack.get_size()
-                screen_h = sz[1]
-                screen_w = sz[0]
-            except Exception:
-                screen_h, screen_w = 720, 1280
-
-            sw, sh = 340, 52
-            idx = len(cls._toasts)
-            x = (screen_w - sw) / 2
-            y = screen_h - 90 - idx * 62
-
-            root = bui.containerwidget(
-                parent=stack, size=(sw, sh),
-                transition='in_scale', scale=ui_scale(), color=color,
-            )
-            try:
-                bui.containerwidget(edit=root, position=(x, y))
-            except Exception:
-                pass
-            # Background
-            Gradient(root, 0, 0, sw, sh, color, tuple(c * 0.7 for c in color), layers=6)
-            # Icon area
-            try:
-                bui.imagewidget(parent=root, position=(10, 8), size=(36, 36),
-                                texture=bui.gettexture('circleSoft'),
-                                color=(1, 1, 1), opacity=0.25)
-            except Exception:
-                pass
-            bui.textwidget(parent=root, position=(28, 26), size=(0, 0),
-                          text=icon, scale=1.2, color=(1, 1, 1),
-                          h_align='center', v_align='center')
-            # Message
-            bui.textwidget(parent=root, position=(60, 26), size=(0, 0),
-                          text=str(text), scale=0.75, color=(1, 1, 1),
-                          h_align='left', v_align='center',
-                          maxwidth=sw - 80)
-            cls._toasts.append(root)
-
-            def _dismiss():
-                try:
-                    if root.exists():
-                        bui.containerwidget(edit=root, transition='out_scale')
-                except Exception:
-                    pass
-                try:
-                    if root in cls._toasts:
-                        cls._toasts.remove(root)
-                except Exception:
-                    pass
-            bs.AppTimer(duration, _dismiss)
-        except Exception as e:
-            log(f"Toast error: {e}")
-
-
-# ═══════════════════════════════════════════════════════════════
-# BASE WINDOW
-# ═══════════════════════════════════════════════════════════════
-
-_top_win = None
-_api_singleton = None
-_opening = False
-_open_dialogs = []
-
-
-def _later(delay, call):
-    try:
-        bs.AppTimer(delay, call)
-    except Exception:
-        try:
-            call()
-        except Exception as e:
-            log(f"_later: {e}")
-
-
-def _close_all_dialogs():
-    for d in list(_open_dialogs):
-        try:
-            d.close()
-        except Exception:
-            pass
-    _open_dialogs.clear()
-
-
-class BaseWindow:
-    def __init__(self, W, H):
-        global _top_win
+    def __init__(self, W, H, cards, halos=None, outside=False) -> None:
+        cfg = babase.app.config
         self.W, self.H = W, H
-        self._theme_name, self._theme = _theme_current()
-        self._t0 = time.time()
-        self._bg_layers = []
-        self._particles = None
-        self._grad = None
-        self._btns = []
-        self._cards = []
-        self._tick_h = None
+        
+        # Default to Valhalla theme
+        self.theme_name = cfg.get(_CFG_THEME, 'Valhalla')
+        self.theme = _get_theme(self.theme_name)
+        
+        self.speed = float(cfg.get(_CFG_SPEED, 1.0))
+        lvl = cfg.get(_CFG_FX, 2)
+        lvl = lvl if lvl in (0, 1, 2) else 2
+        
+        self._btns: List[List[Any]] = []
+        self._dcards: List[Tuple[_Card, str]] = []
+        self._blend_from: Any = None
+        self._blend_t0 = 0.0
+        self._n = 0
+        
+        ui = bui.app.ui_v1.uiscale
+        kw = dict(size=(W, H), transition='in_scale', parent=bui.get_special_widget('overlay_stack'), scale=_scale(), background=False, stack_offset=(0, -10) if ui is bui.UIScale.SMALL else (0, 0))
+        if outside:
+            kw['on_outside_click_call'] = self.close_sound
+            
+        self.root = bui.containerwidget(**kw)
+        self.color = _theme_rgb(self.theme, time.time() - _FX_T0, self.speed)
+        
+        self.skin = None
+        self.fx = None
+        self._cards: List[Tuple[_Card, str]] = []
+        
+        if self.FX:
+            self.skin = _Skin(self.root, W, H, self.theme, lvl, cards, halos)
+            self.fx = self.skin.fx
+        else:
+            self._cards.append((_Card(self.root, 0, 0, W, H, 16, bw=2.0), 'body'))
+            for x, y, cw, ch, r, kind in cards:
+                self._cards.append((_Card(self.root, x, y, cw, ch, r), kind))
+                
+        self.pal = _palette(self.color)
+        self._paint(self.color)
+        self._timer: Any = bui.AppTimer(0.05 if self.FX else 0.2, bui.WeakCallStrict(self._tick), repeat=True)
 
-        base_color = _theme_rgb(self._theme, 0.0)
-        self.pal = _palette(base_color)
+    def _paint(self, rgb) -> None:
+        """Updates the colors of all UI cards."""
+        if self.skin is not None:
+            self.skin.recolor(rgb)
+            self.pal = self.skin.pal
+        else:
+            self.pal = _palette(rgb)
+            kinds = _kind_colors(self.pal)
+            for card, kind in self._cards:
+                fill, edge = kinds[kind]
+                card.recolor(edge, fill)
+                
+        kinds = _kind_colors(self.pal)
+        keep = []
+        for card, kind in self._dcards:
+            try:
+                fill, edge = kinds[kind]
+                card.recolor(edge, fill)
+                keep.append((card, kind))
+            except Exception:
+                pass
+        self._dcards = keep
 
-        self.root = bui.containerwidget(
-            parent=bui.get_special_widget('overlay_stack'),
-            size=(W, H), transition='in_scale', scale=ui_scale(),
-            color=self.pal['bg_top'],
-        )
-        _top_win = self
+    def _kcol(self, kind, rgb):
+        """Returns the (background_color, text_color) for a specific button kind."""
+        pal = self.pal
+        if kind == 'join':
+            return _join_color(rgb), (1, 1, 1)
+        if kind == 'danger':
+            return _danger_color(rgb), pal['text']
+        return pal['accent'], pal['text']
 
-        # Background gradient
-        self._grad = Gradient(self.root, 0, 0, W, H,
-                              self.pal['bg_top'], self.pal['bg_bot'], layers=10)
+    def _accents(self, rgb) -> None:
+        """Updates the colors of all tracked buttons."""
+        keep = []
+        for e in self._btns:
+            try:
+                c, t = self._kcol(e[1], rgb)
+                bui.buttonwidget(edit=e[0], color=c, textcolor=t)
+                keep.append(e)
+            except Exception:
+                pass
+        self._btns = keep
 
-        # Particles
-        self._particles = ParticleField(self.root, W, H)
+    def on_tick(self, el: float) -> None:
+        """Override in subclasses for custom per-frame updates."""
+        t = getattr(self, 'title', None)
+        if t is not None:
+            try:
+                bui.textwidget(edit=t, color=_light(self.color, 0.3), scale=0.95 + 0.03 * math.sin(el * 2.2))
+            except Exception:
+                pass
 
-        # Start render loop
-        self._loop()
-
-    def _loop(self):
+    def _tick(self) -> None:
+        """The main animation loop."""
         try:
             if not self.root.exists():
-                self._tick_h = None
+                self._timer = None
                 return
-            elapsed = time.time() - _FX_T0
-            color = _theme_rgb(self._theme, elapsed)
-            pal = _palette(color)
-            self.pal = pal
+                
+            el = time.time() - _FX_T0
+            color = _theme_rgb(self.theme, el, self.speed)
+            
+            bf = self._blend_from
+            if bf is not None:
+                k = (time.time() - self._blend_t0) / 1.2
+                if k >= 1.0:
+                    self._blend_from = None
+                else:
+                    k = k * k * (3 - 2 * k)
+                    color = tuple(bf[i] + (color[i] - bf[i]) * k for i in range(3))
+                    
+            self.color = color
+            self._n += 1
+            
+            if self.fx is not None:
+                self.fx.tick(el, color, self.speed)
+                
+            if self._n % 4 == 0 or not self.FX:
+                self._paint(color)
+                
+            if self._n % 3 == 0 or not self.FX:
+                self._accents(color)
+                self.on_tick(el)
+        except Exception:
+            pass
 
-            # Update gradient
-            if self._grad:
-                self._grad.recolor(pal['bg_top'], pal['bg_bot'])
+    def btn(self, parent, pos, size, label, call, kind='accent', ts=0.8, key=None, **kw):
+        """Helper to create a styled button and track it for color updates."""
+        c, t = self._kcol(kind, self.color)
+        b = bui.buttonwidget(parent=parent, position=pos, size=size, label=label, button_type='square', autoselect=True, color=c, textcolor=t, text_scale=ts, on_activate_call=call, **kw)
+        self._btns.append([b, kind, key])
+        return b
 
-            # Update particles
-            if self._particles:
-                self._particles.tick(elapsed, color, pal)
+    def setkind(self, key, kind) -> None:
+        for e in self._btns:
+            if e[2] == key:
+                e[1] = kind
 
-            # Update widgets
-            self._on_tick(elapsed, pal)
-
-            self._tick_h = bs.AppTimer(0.06, MyCall(self._loop))
-        except Exception as e:
-            log(f"Loop error: {e}")
-
-    def _on_tick(self, elapsed, pal):
-        pass
-
-    def make_card(self, x, y, w, h, r=14, kind='surface'):
-        card = Card(self.root, x, y, w, h, r, bw=1.8)
-        edge, fill = self._card_colors(kind)
-        card.recolor(edge, fill)
-        self._cards.append((card, kind))
-        return card
-
-    def _card_colors(self, kind):
-        p = self.pal
-        if kind == 'surface':
-            return p['border'], p['surface']
-        if kind == 'surface_hi':
-            return p['border_hi'], p['surface_hi']
-        if kind == 'header':
-            return p['border_hi'], p['header']
-        if kind == 'field':
-            return p['border'], p['field']
-        return p['border'], p['surface']
-
-    def button(self, parent, pos, size, label, call,
-               kind='accent', text_scale=0.75):
-        p = self.pal
-        if kind == 'accent':
-            c, t = p['accent'], (1, 1, 1)
-        elif kind == 'danger':
-            c, t = p['danger'], (1, 1, 1)
-        elif kind == 'success':
-            c, t = p['success'], (1, 1, 1)
-        elif kind == 'surface':
-            c, t = p['surface_hi'], p['text']
-        elif kind == 'ghost':
-            c, t = p['surface_lo'], p['dim']
-        else:
-            c, t = p['accent'], (1, 1, 1)
-
-        btn = bui.buttonwidget(
-            parent=parent, position=pos, size=size,
-            label=label, color=c, textcolor=t,
-            button_type='square', autoselect=True,
-            text_scale=text_scale,
-            on_activate_call=call,
-            texture=bui.gettexture('buttonSquare'),
-        )
-        self._btns.append((btn, kind))
-        return btn
-
-    def label(self, parent, pos, text, scale=0.7, color=None,
-              h='left', maxwidth=None, v='center'):
-        if color is None:
-            color = self.pal['text']
-        kw = dict(
-            parent=parent, position=pos, size=(0, 0),
-            text=str(text) if text is not None else '',
-            scale=scale, color=color, h_align=h, v_align=v,
-        )
+    def lbl(self, parent, pos, text, scale=0.7, color=TXT, h='left', maxwidth=None, v='center'):
+        """Helper to create a text label."""
+        kw = dict(parent=parent, position=pos, size=(0, 0), text=str(text) if text is not None else '', scale=scale, color=color, h_align=h, v_align=v)
         if maxwidth:
             kw['maxwidth'] = maxwidth
         return bui.textwidget(**kw)
 
     def field(self, parent, pos, size, text='', max_chars=60, desc=''):
+        """Helper to create an input field with a styled background."""
         x, y = pos
         w, h = size
-        self.make_card(x, y, w, h, r=8, kind='field')
-        return bui.textwidget(
-            parent=parent, position=(x + 10, y), size=(w - 20, h),
-            editable=True, text=str(text), autoselect=True,
-            h_align='left', v_align='center',
-            maxwidth=w - 26, max_chars=max_chars,
-            description=desc, color=self.pal['text'],
-            shadow=0.3,
-        )
+        card = _Card(parent, x, y, w, h, 8)
+        self._dcards.append((card, 'field'))
+        fill, edge = _kind_colors(self.pal)['field']
+        card.recolor(edge, fill)
+        return bui.textwidget(parent=parent, position=(x + 8, y), size=(w - 16, h), editable=True, text=str(text if text is not None else ''), autoselect=True, h_align='left', v_align='center', maxwidth=w - 24, max_chars=max_chars, description=desc, shadow=0.3, flatness=1.0, color=(1, 1, 1))
 
-    def divider(self, parent, x, y, w, color=None):
-        if color is None:
-            color = self.pal['border']
-        try:
-            return bui.imagewidget(
-                parent=parent, position=(x, y), size=(w, 1),
-                texture=bui.gettexture('white'), color=color, opacity=0.6,
-            )
-        except Exception:
-            return None
+    def bar(self, parent, x, y, w, h, me=False):
+        """Helper to draw a row background."""
+        return bui.imagewidget(parent=parent, position=(x, y), size=(w, h), texture=bui.gettexture('white'), color=(1, 1, 1) if me else (0, 0, 0), opacity=0.14 if me else 0.30)
 
-    def close(self):
-        global _top_win
-        if _top_win is self:
-            _top_win = None
-        self._tick_h = None
-        _close_all_dialogs()
+    def scroll(self, parent, pos, size, n, row_h):
+        """Helper to create a scrollable area."""
+        sc = bui.scrollwidget(parent=parent, position=pos, size=size, color=(0.4, 0.6, 0.3), border_opacity=0.0)
+        hh = max(n * row_h + 6, size[1])
+        cont = bui.containerwidget(parent=sc, size=(size[0] - 12, hh), background=False)
+        return sc, cont, hh
+
+    def cycle_style(self) -> None:
+        """Switches to the next theme in the list."""
+        cfg = babase.app.config
+        cur = self.theme_name
+        i = (THEME_ORDER.index(cur) + 1) % len(THEME_ORDER) if cur in THEME_ORDER else 0
+        name = THEME_ORDER[i]
+        self._blend_from = self.color
+        self._blend_t0 = time.time()
+        self.theme_name = name
+        self.theme = _get_theme(name)
+        cfg[_CFG_THEME] = name
         try:
-            if self.root.exists():
-                bui.containerwidget(edit=self.root, transition='out_scale')
-                bs.AppTimer(0.2, self.root.delete)
+            cfg.commit()
         except Exception:
             pass
+        if self.fx is not None:
+            self.fx.set_theme(self.theme)
+            self.fx.pulse()
+            self.fx.burst()
+        bui.getsound('ding').play()
+        bui.screenmessage(f"{L('theme')}: {name}", color=_accent(self.color))
 
-    def close_sound(self):
+    def close(self) -> None:
+        global _top
+        if _top is self:
+            _top = None
+        try:
+            if self.root and not self.root.transitioning_out:
+                bui.containerwidget(edit=self.root, transition='out_scale')
+        except Exception:
+            pass
+        self._timer = None
+
+    def close_sound(self) -> None:
         try:
             bui.getsound('swish').play()
         except Exception:
             pass
         self.close()
 
-    def cycle_theme(self):
-        cfg = babase.app.config
-        cur = self._theme_name
-        i = (THEME_ORDER.index(cur) + 1) % len(THEME_ORDER) if cur in THEME_ORDER else 0
-        new_name = THEME_ORDER[i]
-        cfg[_CFG_THEME] = new_name
-        try:
-            cfg.commit()
-        except Exception:
-            pass
-        self._theme_name = new_name
-        self._theme = THEMES[new_name]
-        try:
-            bui.getsound('ding').play()
-        except Exception:
-            pass
-        ToastStack.push(f"{L('style')}: {new_name} {THEMES[new_name]['icon']}", 'info')
 
+class _Dialog(_Win):
+    """Base class for all popup dialogs."""
+    def __init__(self, W, H, title, extra=(), tcolor=None, outside=False) -> None:
+        cards = [(12, H - 58, W - 24, 46, 12, 'head')] + list(extra)
+        super().__init__(W, H, cards, outside=outside)
+        self._tcolor = tcolor
+        self.title = bui.textwidget(parent=self.root, position=(W / 2 + 14, H - 35), size=(0, 0), scale=0.95, text=str(title), maxwidth=W - 130, h_align='center', v_align='center', color=tcolor or TXT)
+        self.close_btn = self.btn(self.root, (18, H - 52), (38, 38), bui.charstr(bui.SpecialChar.CLOSE), self.close_sound, ts=0.9)
+        bui.containerwidget(edit=self.root, cancel_button=self.close_btn)
+
+    def on_tick(self, el):
+        if self._tcolor is None:
+            super().on_tick(el)
+
+
+def _later(delay, call):
+    """Safe wrapper for delayed calls."""
+    try:
+        bui.apptimer(delay, call)
+    except Exception:
+        call()
 
 # ═══════════════════════════════════════════════════════════════
-# DIALOGS
+# 💬 DIALOGS (Popups, Confirms, Inputs)
 # ═══════════════════════════════════════════════════════════════
 
-class Dialog(BaseWindow):
-    def __init__(self, W, H, title, tcolor=None):
-        super().__init__(W, H)
-        _open_dialogs.append(self)
-        self._closed = False
-
-        # Backdrop
-        try:
-            self.backdrop = bui.containerwidget(
-                parent=bui.get_special_widget('overlay_stack'),
-                size=(2000, 2000), color=(0, 0, 0),
-            )
-            try:
-                bui.containerwidget(edit=self.backdrop,
-                                    position=(-900, -900), opacity=0.72)
-            except Exception:
-                pass
-        except Exception:
-            self.backdrop = None
-
-        # Bring root to front over backdrop
-        try:
-            bui.containerwidget(edit=self.root, transition=None)
-        except Exception:
-            pass
-
-        # Header
-        self.make_card(12, H - 58, W - 24, 46, r=12, kind='header')
-        self._title_w = self.label(
-            self.root, (W / 2 + 12, H - 35), title,
-            scale=0.95, color=tcolor or self.pal['text'],
-            h='center', maxwidth=W - 130,
-        )
-        self._title_color_fixed = tcolor
-
-        # Close button
-        self.close_btn = bui.buttonwidget(
-            parent=self.root, position=(18, H - 52), size=(38, 38),
-            label=bui.charstr(bui.SpecialChar.CLOSE),
-            color=self.pal['danger'], textcolor=(1, 1, 1),
-            button_type='square', text_scale=0.9,
-            on_activate_call=MyCall(self.close_sound),
-            texture=bui.gettexture('buttonSquare'),
-        )
-        try:
-            bui.containerwidget(edit=self.root, cancel_button=self.close_btn)
-        except Exception:
-            pass
-
-    def _on_tick(self, elapsed, pal):
-        if not self._title_color_fixed:
-            try:
-                bui.textwidget(edit=self._title_w, color=pal['text'])
-            except Exception:
-                pass
-
-    def close(self):
-        if self._closed:
-            return
-        self._closed = True
-        try:
-            _open_dialogs.remove(self)
-        except Exception:
-            pass
-        if self.backdrop:
-            try:
-                bui.containerwidget(edit=self.backdrop, transition='out_scale')
-                bs.AppTimer(0.2, self.backdrop.delete)
-            except Exception:
-                pass
-        BaseWindow.close(self)
-
-
-class AlertDialog(Dialog):
-    def __init__(self, title, text, kind='info', on_ok=None):
-        color_map = {'success': (0.30, 0.95, 0.55),
-                     'error': (1.0, 0.35, 0.40),
-                     'warn': (1.0, 0.75, 0.20),
-                     'info': (0.30, 0.70, 1.0)}
-        tcolor = color_map.get(kind, color_map['info'])
-        lines = str(text).split('\n')
-        W, H = 400, 160 + 22 * max(1, min(len(lines), 8))
-        super().__init__(W, H, title, tcolor=tcolor)
+class Popup(_Dialog):
+    def __init__(self, title, text, on_ok=None, kind="info"):
         self._on_ok = on_ok
-
-        # Message card
-        self.make_card(12, 76, W - 24, H - 148, r=12, kind='surface')
+        col = GREEN if kind == "success" else RED if kind == "error" else GOLD
+        W = 380
+        lines = str(text).split("\n")
+        H = 150 + 20 * max(1, min(len(lines), 8))
+        super().__init__(W, H, title, extra=[(12, 70, W - 24, H - 140, 12, 'card')], tcolor=col)
         y = H - 70 - 20
         for ln in lines[:8]:
-            self.label(self.root, (W / 2, y), ln, scale=0.65,
-                       color=self.pal['text'], h='center', maxwidth=W - 60)
-            y -= 22
-
-        ok = self.button(self.root, (W / 2 - 70, 20), (140, 42),
-                         L('ok'), MyCall(self._ok), kind='success')
-        try:
-            bui.containerwidget(edit=self.root, start_button=ok)
-        except Exception:
-            pass
+            self.lbl(self.root, (W / 2, y), ln, 0.65, TXT, 'center', maxwidth=W - 50)
+            y -= 20
+        ok = self.btn(self.root, (W / 2 - 70, 16), (140, 40), L("ok"), self._ok, kind='join')
+        bui.containerwidget(edit=self.root, start_button=ok)
 
     def _ok(self):
         self.close()
         if self._on_ok:
-            _later(0.22, MyCall(self._on_ok))
+            _later(0.25, MyCall(self._on_ok))
 
 
-class ConfirmDialog(Dialog):
+class ConfirmDialog(_Dialog):
     def __init__(self, title, text, on_yes, danger=True):
-        W, H = 420, 220
-        super().__init__(W, H, title,
-                         tcolor=(1.0, 0.35, 0.40) if danger else (1.0, 0.78, 0.30))
+        W, H = 400, 200
+        super().__init__(W, H, title, extra=[(12, 70, W - 24, H - 140, 12, 'card')], tcolor=RED if danger else GOLD)
         self._on_yes = on_yes
-
-        self.make_card(12, 74, W - 24, H - 148, r=12, kind='surface')
-        self.label(self.root, (W / 2, H - 110), text, scale=0.7,
-                   color=self.pal['text'], h='center', maxwidth=W - 60)
-
-        self.button(self.root, (24, 20), (170, 42), L('yes'),
-                    MyCall(self._yes), kind='danger' if danger else 'success')
-        self.button(self.root, (W - 194, 20), (170, 42), L('no'),
-                    MyCall(self.close_sound), kind='surface')
+        self.lbl(self.root, (W / 2, H / 2 - 5), text, 0.65, TXT, 'center', maxwidth=W - 50)
+        self.btn(self.root, (24, 16), (170, 40), L("yes2"), self._yes, kind='danger' if danger else 'join')
+        self.btn(self.root, (W - 194, 16), (170, 40), L("no2"), self.close_sound)
 
     def _yes(self):
         self.close()
-        if self._on_yes:
-            _later(0.22, MyCall(self._on_yes))
+        _later(0.2, MyCall(self._on_yes))
 
 
-class NumberInputDialog(Dialog):
-    def __init__(self, title, initial, on_ok):
-        W, H = 400, 230
-        super().__init__(W, H, title)
-        self._on_ok = on_ok
-
-        self.make_card(12, 74, W - 24, H - 148, r=12, kind='surface')
-        self.inp = self.field(self.root, (40, 100), (W - 80, 42),
-                              str(initial) if initial is not None else "",
-                              max_chars=12, desc=L('amount_hint'))
-
-        self.button(self.root, (24, 20), (170, 42), L('confirm'),
-                    MyCall(self._confirm), kind='success')
-        self.button(self.root, (W - 194, 20), (170, 42), L('cancel'),
-                    MyCall(self.close_sound), kind='surface')
+class NumberInputPopup(_Dialog):
+    def __init__(self, title, initial_val, on_submit):
+        W, H = 380, 210
+        super().__init__(W, H, title, extra=[(12, 70, W - 24, H - 140, 12, 'card')])
+        self._on_submit = on_submit
+        self.inp = self.field(self.root, (50, 90), (W - 100, 38), str(initial_val if initial_val is not None else ""), max_chars=12, desc=title)
+        self.btn(self.root, (24, 16), (160, 40), L("confirm"), self._confirm, kind='join')
+        self.btn(self.root, (W - 184, 16), (160, 40), L("cancel"), self.close_sound)
 
     def _confirm(self):
         txt = (bui.textwidget(query=self.inp) or '').strip()
-        if not txt:
+        if txt == "":
             val = None
         else:
             try:
                 val = int(txt)
             except Exception:
-                try:
-                    bui.getsound('error').play()
-                except Exception:
-                    pass
+                bui.screenmessage(L("error"), color=(1, 0.3, 0.3))
+                bui.getsound('error').play()
                 return
         self.close()
-        if self._on_ok:
-            _later(0.22, MyCall(self._on_ok, val))
+        _later(0.2, MyCall(self._on_submit, val))
 
 
-class SelectDialog(Dialog):
-    def __init__(self, title, options, on_ok):
+class SelectDialog(_Dialog):
+    def __init__(self, title, options, on_confirm):
+        W = 380
         n = len(options)
-        W = 400
-        H = 150 + n * 48
+        H = 140 + n * 46
         super().__init__(W, H, title)
-        self._on_ok = on_ok
-        self._sel = None
+        self._on = on_confirm
+        self._sel = _NOSEL
         self._keys = []
-        self._choices = []
-
-        y = H - 76
+        y = H - 68
         for i, (val, label) in enumerate(options):
-            y -= 46
+            y -= 44
             key = f"opt{i}"
             self._keys.append((key, val))
-            b = self.button(self.root, (24, y), (W - 48, 40),
-                            label, MyCall(self._pick, key, val),
-                            kind='surface', text_scale=0.85)
-            self._choices.append((key, val, b))
-
-        self.button(self.root, (24, 20), (170, 42), L('confirm'),
-                    MyCall(self._confirm), kind='success')
-        self.button(self.root, (W - 194, 20), (170, 42), L('cancel'),
-                    MyCall(self.close_sound), kind='surface')
+            self.btn(self.root, (24, y), (W - 48, 38), label, MyCall(self._pick, key, val), ts=0.85, key=key)
+            y -= 2
+        self.btn(self.root, (24, 16), (160, 40), L("confirm"), self._confirm, kind='join')
+        self.btn(self.root, (W - 184, 16), (160, 40), L("cancel"), self.close_sound)
 
     def _pick(self, key, val):
         self._sel = val
-        p = self.pal
-        for k, _v, b in self._choices:
-            c = p['accent'] if k == key else p['surface_hi']
-            try:
-                bui.buttonwidget(edit=b, color=c)
-            except Exception:
-                pass
+        for k, _v in self._keys:
+            self.setkind(k, 'join' if k == key else 'accent')
 
     def _confirm(self):
-        if self._sel is None:
-            try:
-                bui.getsound('error').play()
-            except Exception:
-                pass
+        if self._sel is _NOSEL:
+            bui.getsound('error').play()
             return
         self.close()
-        if self._on_ok:
-            _later(0.22, MyCall(self._on_ok, self._sel))
-
-
-# ═══════════════════════════════════════════════════════════════
-# LOGIN WINDOW
-# ═══════════════════════════════════════════════════════════════
-
-class LoginWindow(BaseWindow):
-    def __init__(self, api, on_success):
-        W, H = 520, 380
-        super().__init__(W, H)
-        self.api = api
-        self.on_success = on_success
-        self._busy = False
-        self._spin = None
-
-        # Header card
-        self.make_card(12, H - 74, W - 24, 62, r=16, kind='header')
-        self._title = self.label(
-            self.root, (W / 2, H - 43), u"\ue010  BSLIFE ALLY",
-            scale=1.05, color=self.pal['gold'], h='center', maxwidth=W - 120,
-        )
-        self.label(self.root, (W / 2, H - 62), L('login_sub'),
-                   scale=0.48, color=self.pal['dim'], h='center')
-
-        # Close
-        cb = bui.buttonwidget(
-            parent=self.root, position=(22, H - 66), size=(42, 42),
-            label=bui.charstr(bui.SpecialChar.CLOSE),
-            color=self.pal['danger'], textcolor=(1, 1, 1),
-            button_type='square', text_scale=0.9,
-            on_activate_call=MyCall(self.close_sound),
-            texture=bui.gettexture('buttonSquare'),
-        )
-        try:
-            bui.containerwidget(edit=self.root, cancel_button=cb)
-        except Exception:
-            pass
-
-        # Info card
-        self.make_card(30, 250, W - 60, 78, r=14, kind='surface_hi')
-        self.label(self.root, (W / 2, 302), "💡  " + L('login'),
-                   scale=0.62, color=self.pal['accent'], h='center')
-        self.label(self.root, (W / 2, 280), L('login_h1'),
-                   scale=0.55, color=self.pal['text'], h='center', maxwidth=W - 80)
-        self.label(self.root, (W / 2, 262), L('login_h2'),
-                   scale=0.55, color=self.pal['text'], h='center', maxwidth=W - 80)
-
-        # Username field
-        self.label(self.root, (46, 218), "👤  " + L('username') + ":",
-                   scale=0.62, color=self.pal['dim'])
-        self.inp_user = self.field(self.root, (46, 176), (W - 92, 36),
-                                   "", max_chars=30, desc=L('username'))
-
-        # OTP field
-        self.label(self.root, (46, 148), "🔑  " + L('otp') + ":",
-                   scale=0.62, color=self.pal['dim'])
-        self.inp_otp = self.field(self.root, (46, 106), (W - 92, 36),
-                                  "", max_chars=8, desc=L('otp'))
-
-        # Status
-        self._status = self.label(
-            self.root, (W / 2, 76), "", scale=0.6,
-            color=self.pal['dim'], h='center', maxwidth=W - 60,
-        )
-
-        # Buttons
-        b = self.button(self.root, (46, 20), (W - 92, 46),
-                        "⚡  " + L('login'), MyCall(self._do_login),
-                        kind='accent', text_scale=0.85)
-        try:
-            bui.containerwidget(edit=self.root, start_button=b)
-        except Exception:
-            pass
-
-        # Theme cycle
-        self.button(self.root, (W - 60, 20), (44, 46),
-                    "◑", MyCall(self.cycle_theme), kind='surface')
-
-    def _on_tick(self, elapsed, pal):
-        try:
-            bui.textwidget(edit=self._title, color=pal['gold'])
-            bui.textwidget(edit=self._status, color=pal['dim'])
-        except Exception:
-            pass
-
-    def _status_msg(self, text, color):
-        try:
-            bui.textwidget(edit=self._status, text=text, color=color)
-        except Exception:
-            pass
-
-    def _do_login(self):
-        if self._busy:
-            return
-        name = (bui.textwidget(query=self.inp_user) or '').strip()
-        otp = (bui.textwidget(query=self.inp_otp) or '').strip()
-        if not name or not otp:
-            self._status_msg(L('fill_all'), self.pal['danger'])
-            try:
-                bui.getsound('error').play()
-            except Exception:
-                pass
-            return
-
-        self._busy = True
-        self._status_msg(L('logging_in') + "...", self.pal['dim'])
-        self._spin = Spinner(self.root, self.W - 40, 94, 22, self.pal['accent'])
-
-        def worker():
-            ok, msg = self.api.login(name, otp)
-            try:
-                bui.pushcall(MyCall(self._done, ok, msg), from_other_thread=True)
-            except Exception as e:
-                log(f"Login pushcall: {e}")
-        threading.Thread(target=worker, daemon=True).start()
-
-    def _done(self, ok, msg):
-        self._busy = False
-        if self._spin:
-            self._spin.delete()
-            self._spin = None
-        if not self.root.exists():
-            return
-        if ok:
-            self._status_msg("✓  " + L('success_load'), self.pal['success'])
-            _later(0.5, MyCall(self._go_next))
-        else:
-            self._status_msg("✕  " + L('error') + ": " + str(msg), self.pal['danger'])
-            try:
-                bui.getsound('error').play()
-            except Exception:
-                pass
-
-    def _go_next(self):
-        self.close()
-        _later(0.28, MyCall(self.on_success))
-
-
-# ═══════════════════════════════════════════════════════════════
-# MAIN WINDOW (with tabs)
-# ═══════════════════════════════════════════════════════════════
-
-TAB_ICONS = {
-    "overview": "◈",
-    "members": "👥",
-    "requests": "✉",
-    "vault": "💰",
-    "settings": "⚙",
-    "ranking": "🏆",
-    "news": "📰",
-    "chat": "💬",
-    "channels": "★",
-}
-
-
-class MainWindow(BaseWindow):
-    TABS = ["overview", "members", "requests", "vault",
-            "settings", "ranking", "news", "chat", "channels"]
-
-    def __init__(self, api):
-        W, H = 680, win_h()
-        super().__init__(W, H)
-        self.api = api
-        self.tab = "overview"
-        self._tab_btns = {}
-        self._req_filter = "new"
-        self._tok = 0
-        self._closing = False
-        self._news = []
-        self._chat_sig = None
-        self._chat_scroll = None
-        self._chat_cont = None
-
-        # Layout
-        self._header_h = 64
-        self._footer_h = 44
-        self._sidebar_w = 140
-        self._content_x = 16 + self._sidebar_w + 12
-        self._content_w = W - 16 - self._content_x - 16
-        self._content_y = 16 + self._footer_h
-        self._content_h = H - self._header_h - 24 - self._content_y
-
-        # Header
-        self.make_card(12, H - 76, W - 24, 64, r=16, kind='header')
-        self._title = self.label(
-            self.root, (32, H - 48), u"\ue010  BSLIFE",
-            scale=1.0, color=self.pal['gold'], maxwidth=400,
-        )
-        self._subtitle = self.label(
-            self.root, (32, H - 66), L('loading') + "...",
-            scale=0.5, color=self.pal['dim'], maxwidth=400,
-        )
-        self.button(self.root, (W - 206, H - 62), (60, 38), "◑",
-                    MyCall(self.cycle_theme), kind='surface')
-        self.button(self.root, (W - 138, H - 62), (54, 38), L('style'),
-                    MyCall(self.cycle_theme), kind='surface', text_scale=0.55)
-        self.button(self.root, (W - 76, H - 62), (60, 38), L('logout'),
-                    MyCall(self._logout), kind='danger', text_scale=0.55)
-
-        cb = bui.buttonwidget(
-            parent=self.root, position=(16, H - 66), size=(46, 46),
-            label=bui.charstr(bui.SpecialChar.CLOSE),
-            color=self.pal['danger'], textcolor=(1, 1, 1),
-            button_type='square', text_scale=0.9,
-            on_activate_call=MyCall(self.close_sound),
-            texture=bui.gettexture('buttonSquare'),
-        )
-        try:
-            bui.containerwidget(edit=self.root, cancel_button=cb)
-        except Exception:
-            pass
-
-        # Sidebar
-        self.make_card(12, self._content_y, self._sidebar_w, self._content_h,
-                       r=14, kind='surface')
-        self._build_sidebar()
-
-        # Content
-        self.make_card(self._content_x - 8, self._content_y,
-                       self._content_w + 16, self._content_h,
-                       r=14, kind='surface')
-        self._content = None
-        self._new_content()
-
-        # Footer status
-        self._status = self.label(
-            self.root, (W / 2, 22), "", scale=0.6,
-            color=self.pal['dim'], h='center', maxwidth=W - 60,
-        )
-
-        self._refresh()
-
-    def _on_tick(self, elapsed, pal):
-        try:
-            bui.textwidget(edit=self._title, color=pal['gold'])
-            bui.textwidget(edit=self._subtitle, color=pal['dim'])
-            bui.textwidget(edit=self._status, color=pal['dim'])
-        except Exception:
-            pass
-
-    def _set_status(self, text, color=None):
-        try:
-            bui.textwidget(
-                edit=self._status, text=text,
-                color=color or self.pal['dim'],
-            )
-        except Exception:
-            pass
-
-    def _new_content(self):
-        if self._content is not None:
-            try:
-                self._content.delete()
-            except Exception:
-                pass
-        self._content = bui.containerwidget(
-            parent=self.root,
-            position=(self._content_x, self._content_y),
-            size=(self._content_w, self._content_h),
-            background=False,
-        )
-        self._tok += 1
-        return self._content
-
-    def _reload(self, *_a):
-        if self._closing or not self.root.exists():
-            return
-        self._new_content()
-        self._render()
-
-    def _alive(self, tok):
-        try:
-            return (not self._closing) and tok == self._tok and self.root.exists()
-        except Exception:
-            return False
-
-    def _build_sidebar(self):
-        for b in self._tab_btns.values():
-            try:
-                b.delete()
-            except Exception:
-                pass
-        self._tab_btns = {}
-
-        tabs = [k for k in self.TABS
-                if not (k in ("requests", "settings") and self.api.roleid not in (1, 2))]
-
-        n = len(tabs)
-        gap = 3
-        avail = self._content_h - 16
-        th = min(38, (avail - (n - 1) * gap) / n)
-        y = self._content_y + self._content_h - 8 - th
-
-        for key in tabs:
-            icon = TAB_ICONS.get(key, "•")
-            label = f"{icon}  {L(key)}"
-            kind = 'accent' if key == self.tab else 'surface_hi'
-            c, t = (self.pal['accent'], (1, 1, 1)) if key == self.tab \
-                   else (self.pal['surface_hi'], self.pal['text'])
-            btn = bui.buttonwidget(
-                parent=self.root,
-                position=(12 + 6, y),
-                size=(self._sidebar_w - 12, th),
-                label=label, color=c, textcolor=t,
-                button_type='square', autoselect=True,
-                text_scale=0.65,
-                on_activate_call=MyCall(self._switch_tab, key),
-                texture=bui.gettexture('buttonSquare'),
-            )
-            self._tab_btns[key] = btn
-            y -= th + gap
-
-    def _switch_tab(self, key):
-        if self._closing:
-            return
-        self.tab = key
-        for k, b in self._tab_btns.items():
-            c = self.pal['accent'] if k == key else self.pal['surface_hi']
-            t = (1, 1, 1) if k == key else self.pal['text']
-            try:
-                bui.buttonwidget(edit=b, color=c, textcolor=t)
-            except Exception:
-                pass
-        self._reload()
-
-    def _refresh(self):
-        self._set_status(L('loading') + "...")
-        Net.fetch(self.api, "ally_status", cb=self._on_status)
-
-    def _on_status(self, st):
-        if self._closing or not self.root.exists():
-            return
-        if st in ("3", "0", "", None):
-            self._set_status(L('recovering') + "...")
-            def check(who):
-                if who:
-                    self._refresh()
-                else:
-                    self._set_status(L('expired'), self.pal['danger'])
-                    self._logout()
-            Net.fetch(self.api, "whoami", cb=check)
-            return
-        if not isinstance(st, dict):
-            self.close()
-            HubWindow(self.api)
-            return
-        if "error" in st and "name" not in st:
-            self._set_status(L('error') + ": " + str(st['error']),
-                             self.pal['danger'])
-            return
-        self.api.ally = st.get("name")
-        self.api.roleid = st.get("roleid")
-        self.api.memberid = st.get("memberid")
-        try:
-            bui.textwidget(
-                edit=self._title,
-                text=u"\ue010  " + f"{st.get('name') or L('no_ally')}",
-            )
-            bui.textwidget(
-                edit=self._subtitle,
-                text=f"{L('user')}: {self.api.user or '?'}  ·  {role_name(st.get('roleid'))}",
-            )
-        except Exception:
-            pass
-        self._set_status("●  " + L('ready'), self.pal['success'])
-        self._build_sidebar()
-        self._reload()
-
-    def _render(self):
-        handler = getattr(self, "_tab_" + self.tab, None)
-        if handler:
-            try:
-                handler()
-            except Exception as e:
-                log(f"Render {self.tab}: {e}")
-
-    def _logout(self):
-        self._closing = True
-        self._tok += 1
-        self.api.logout()
-        self.close()
-        _later(0.3, MyCall(LoginWindow, self.api, _route))
-
-    # ═══════════════════════ TABS ═══════════════════════
-
-    def _tab_overview(self):
-        c, tok = self._content, self._tok
-        CW, CH = self._content_w, self._content_h
-
-        def cb(st):
-            if not self._alive(tok) or not isinstance(st, dict):
-                return
-            # Section header
-            self.label(c, (CW / 2, CH - 24), "◈  " + L('overview'),
-                       scale=1.05, color=self.pal['gold'], h='center')
-            self.divider(c, 20, CH - 40, CW - 40)
-
-            # Info cards
-            cards = [
-                ("🏰", L('ally_name'), st.get('name') or '—', self.pal['text']),
-                ("👤", L('your_role'), role_name(st.get('roleid')),
-                 role_color(st.get('roleid'), self.pal)),
-                ("👥", L('members_count'), str(st.get('count', '?')), self.pal['text']),
-            ]
-            y = CH - 68
-            for icon, k, v, col in cards:
-                y -= 60
-                self.make_card(20, y, CW - 40, 52, r=10, kind='surface_hi')
-                self.label(c, (40, y + 26), f"{icon}  {k}", scale=0.7,
-                           color=self.pal['dim'])
-                self.label(c, (CW - 40, y + 26), str(v), scale=0.8,
-                           color=col, h='right', maxwidth=CW / 2)
-
-            # Leave button
-            if self.api.roleid != 1:
-                self.button(c, (CW / 2 - 100, 10), (200, 42),
-                            "⚠  " + L('leave'), MyCall(self._confirm_leave),
-                            kind='danger', text_scale=0.75)
-
-        Net.fetch(self.api, "ally_status", cb=cb)
-
-    def _confirm_leave(self):
-        def do_leave():
-            def cb(r):
-                if r == "1":
-                    ToastStack.push(L('leave'), 'warn')
-                    self.close()
-                    _later(0.5, MyCall(_route))
-                else:
-                    ToastStack.push(L('fail'), 'error')
-            Net.fetch(self.api, "ally_leave", cb=cb)
-        ConfirmDialog(L('leave'), L('leave_confirm'), do_leave, danger=True)
-
-    def _tab_members(self):
-        c, tok = self._content, self._tok
-        CW, CH = self._content_w, self._content_h
-
-        def cb(members):
-            if not self._alive(tok):
-                return
-            if not isinstance(members, list):
-                if members in ("3", "", "-1"):
-                    self._on_status("3")
-                return
-            if not members:
-                self.label(c, (CW / 2, CH / 2), L('empty'),
-                           scale=0.9, color=self.pal['dim'], h='center')
-                return
-
-            self.label(c, (CW / 2, CH - 24),
-                       f"👥  {L('members')} ({len(members)})",
-                       scale=1.0, color=self.pal['gold'], h='center')
-            self.divider(c, 20, CH - 40, CW - 40)
-
-            sc = bui.scrollwidget(
-                parent=c, position=(0, 0),
-                size=(CW, CH - 50),
-                color=(0.4, 0.6, 0.3), border_opacity=0.0,
-            )
-            rh = 38
-            hh = max(rh * len(members) + 10, CH - 50)
-            cont = bui.containerwidget(parent=sc, size=(CW - 12, hh), background=False)
-            rw = CW - 12
-            y = hh
-
-            for m in members:
-                y -= rh
-                is_me = m.get('id') == self.api.memberid
-                rid = m.get('roleid')
-                role_c = role_color(rid, self.pal)
-                bg_col = self.pal['surface_hi'] if is_me else self.pal['surface']
-
-                # Row
-                self._row_bg(cont, rw, y, rh, bg_col)
-
-                # Role badge
-                self._row_badge(cont, 8, y + (rh - 22) / 2, 60, 22, role_c, role_name(rid))
-
-                # Name
-                self.label(cont, (78, y + rh / 2), m.get('name', '?'),
-                           scale=0.65, color=self.pal['text'],
-                           maxwidth=rw - 200)
-
-                # Muted marker
-                if m.get('muted'):
-                    self.label(cont, (rw - 120, y + rh / 2), "🔇",
-                               scale=0.6, color=self.pal['danger'], h='right')
-
-                # Manage button
-                if self.api.roleid in (1, 2) and not is_me:
-                    self.button(cont, (rw - 50, y + 6), (42, 26),
-                                "⋯", MyCall(self._open_member, m),
-                                kind='accent', text_scale=0.6)
-
-        Net.fetch(self.api, "ally_members", cb=cb)
-
-    def _row_bg(self, parent, rw, y, rh, color):
-        try:
-            bui.imagewidget(
-                parent=parent, position=(0, y + 2),
-                size=(rw, rh - 4),
-                texture=bui.gettexture('white'),
-                color=color, opacity=0.5,
-            )
-        except Exception:
-            pass
-
-    def _row_badge(self, parent, x, y, w, h, color, text):
-        try:
-            bui.imagewidget(
-                parent=parent, position=(x, y), size=(w, h),
-                texture=bui.gettexture('circleSoft'),
-                color=color, opacity=0.85,
-            )
-        except Exception:
-            pass
-        self.label(parent, (x + w / 2, y + h / 2), text,
-                   scale=0.5, color=(1, 1, 1), h='center', maxwidth=w - 6)
-
-    def _open_member(self, m):
-        MemberActionWindow(self.api, m, self._reload)
-
-    def _tab_requests(self):
-        c, tok = self._content, self._tok
-        CW, CH = self._content_w, self._content_h
-
-        self.label(c, (CW / 2, CH - 24), "✉  " + L('requests'),
-                   scale=1.0, color=self.pal['gold'], h='center')
-        self.divider(c, 20, CH - 40, CW - 40)
-
-        # Filter buttons
-        bw = (CW - 20) / 3
-        for i, key in enumerate(["new", "accepted", "rejected"]):
-            kind = 'accent' if key == self._req_filter else 'surface'
-            self.button(c, (10 + i * bw, CH - 84), (bw - 6, 30),
-                        L(key), MyCall(self._set_filter, key),
-                        kind=kind, text_scale=0.6)
-
-        def cb(reqs):
-            if not self._alive(tok):
-                return
-            if not isinstance(reqs, list):
-                return
-            if not reqs:
-                self.label(c, (CW / 2, (CH - 100) / 2), L('empty'),
-                           scale=0.9, color=self.pal['dim'], h='center')
-                return
-
-            sc = bui.scrollwidget(
-                parent=c, position=(0, 0),
-                size=(CW, CH - 100),
-                color=(0.4, 0.6, 0.3), border_opacity=0.0,
-            )
-            rh = 40
-            hh = max(rh * len(reqs) + 10, CH - 100)
-            cont = bui.containerwidget(parent=sc, size=(CW - 12, hh), background=False)
-            rw = CW - 12
-            y = hh
-
-            for r in reqs:
-                y -= rh
-                self._row_bg(cont, rw, y, rh, self.pal['surface'])
-                self.label(cont, (10, y + rh / 2), r.get('name', '?'),
-                           scale=0.65, color=self.pal['text'],
-                           maxwidth=rw - 200)
-                if self._req_filter == "new":
-                    self.button(cont, (rw - 150, y + 8), (68, 26),
-                                "✓", MyCall(self._handle_req, r, "accept"),
-                                kind='success', text_scale=0.7)
-                    self.button(cont, (rw - 78, y + 8), (68, 26),
-                                "✕", MyCall(self._handle_req, r, "reject"),
-                                kind='danger', text_scale=0.7)
-
-        Net.fetch(self.api, "ally_requests", (self._req_filter,), cb=cb)
-
-    def _set_filter(self, key):
-        self._req_filter = key
-        self._reload()
-
-    def _handle_req(self, r, mode):
-        Net.fetch(self.api, "ally_handle_request",
-                  (r.get('id'), mode), cb=lambda res: self._reload())
-
-    # ═══════════════════════ VAULT — the working one ═══════════════════════
-
-    def _tab_vault(self):
-        c, tok = self._content, self._tok
-        CW, CH = self._content_w, self._content_h
-
-        self.label(c, (CW / 2, CH - 24), "💰  " + L('vault'),
-                   scale=1.0, color=self.pal['gold'], h='center')
-        self.divider(c, 20, CH - 40, CW - 40)
-
-        # Loading placeholder
-        loading = self.label(c, (CW / 2, CH / 2), L('loading') + "...",
-                             scale=0.85, color=self.pal['dim'], h='center')
-
-        def cb(v):
-            if not self._alive(tok):
-                return
-            try:
-                loading.delete()
-            except Exception:
-                pass
-            if not isinstance(v, dict):
-                self.label(c, (CW / 2, CH / 2), "⚠  " + str(v),
-                           scale=0.75, color=self.pal['danger'], h='center')
-                return
-
-            coins = v.get('coin', 0)
-
-            # Big balance hero card
-            self.make_card(20, CH - 190, CW - 40, 130, r=16, kind='surface_hi')
-            self.label(c, (CW / 2, CH - 78), "💎",
-                       scale=2.5, color=self.pal['gold'], h='center')
-            self.label(c, (CW / 2, CH - 116), fmt(coins),
-                       scale=2.0, color=self.pal['gold'], h='center',
-                       maxwidth=CW - 80)
-            self.label(c, (CW / 2, CH - 148), L('coins'),
-                       scale=0.65, color=self.pal['dim'], h='center')
-
-            # Action buttons
-            btns = [
-                ("⬇  " + L('deposit'), self._vault_deposit, 'success'),
-                ("📜  " + L('history'), self._vault_history, 'accent'),
-            ]
-            if self.api.roleid in (1, 2):
-                btns.append(("✂  " + L('split'), self._vault_split, 'danger'))
-
-            bw = (CW - 40 - 12 * (len(btns) - 1)) / len(btns)
-            x = 20
-            for label, call, kind in btns:
-                self.button(c, (x, CH - 250), (bw, 46),
-                            label, call, kind=kind, text_scale=0.7)
-                x += bw + 12
-
-            # Mini bar chart (deposit history visualization)
-            self.label(c, (CW / 2, CH - 285), "📊  " + L('history'),
-                       scale=0.7, color=self.pal['dim'], h='center')
-
-            chart_y = CH - 400
-            chart_h = 100
-            chart_x = 30
-            chart_w = CW - 60
-
-            def chart_cb(news):
-                if not self._alive(tok):
-                    return
-                if not isinstance(news, list) or not news:
-                    self.label(c, (CW / 2, chart_y + chart_h / 2), L('no_data'),
-                               scale=0.7, color=self.pal['dim'], h='center')
-                    return
-                # Draw bars
-                n = min(len(news), 8)
-                items = news[:n]
-                bw_ = (chart_w - (n - 1) * 6) / n
-                max_val = 1
-                for it in items:
-                    try:
-                        val = abs(int(it.get('val', 0) or 1))
-                        if val > max_val:
-                            max_val = val
-                    except Exception:
-                        pass
-
-                for i, it in enumerate(items):
-                    try:
-                        val = abs(int(it.get('val', 0) or 1))
-                    except Exception:
-                        val = 1
-                    bh = max(6, (val / max_val) * (chart_h - 10))
-                    bx = chart_x + i * (bw_ + 6)
-                    by = chart_y + 5
-
-                    # Bar
-                    try:
-                        bui.imagewidget(
-                            parent=c,
-                            position=(bx, by),
-                            size=(bw_, bh),
-                            texture=bui.gettexture('white'),
-                            color=self.pal['accent'],
-                            opacity=0.8,
-                        )
-                    except Exception:
-                        pass
-                    # Value on top
-                    self.label(c, (bx + bw_ / 2, by + bh + 8), fmt(val),
-                               scale=0.4, color=self.pal['dim'], h='center')
-
-            Net.fetch(self.api, "ally_vault_news", (None,), cb=chart_cb)
-
-        Net.fetch(self.api, "ally_vault_status", cb=cb)
-
-    def _vault_deposit(self):
-        def do_deposit(amount):
-            if amount is None:
-                return
-            if amount < 100:
-                AlertDialog(L('fail'), L('min_deposit'), kind='error')
-                return
-
-            def cb(r):
-                if r == "1":
-                    ToastStack.push(L('deposit_ok'), 'success')
-                    AlertDialog(L('success'), L('deposit_ok'),
-                                kind='success', on_ok=self._reload)
-                else:
-                    ToastStack.push(L('no_coins'), 'error')
-                    AlertDialog(L('fail'),
-                                L('no_coins') if r == "coin_not_enough" else L('fail'),
-                                kind='error')
-            Net.fetch(self.api, "ally_vault_add", (amount,), cb=cb)
-        NumberInputDialog(L('enter_amount'), "", do_deposit)
-
-    def _vault_history(self):
-        VaultHistoryWindow(self.api)
-
-    def _vault_split(self):
-        opts = [
-            ("equal_all", "🟰  " + L('equal_all')),
-            ("equal_ranking", "🏆  " + L('equal_top')),
-            ("ranking_points", "⭐  " + L('by_points')),
-        ]
-
-        def picked(typ):
-            def cb(r):
-                if r == "1":
-                    ToastStack.push(L('vault_ok'), 'success')
-                    AlertDialog(L('success'), L('vault_ok'),
-                                kind='success', on_ok=self._reload)
-                else:
-                    msg = {"coin_not_enough": L('no_coins'),
-                           "no_ranking_info": L('not_ranked')}.get(r, L('fail'))
-                    AlertDialog(L('fail'), msg, kind='error')
-            Net.fetch(self.api, "ally_vault_clear", (typ,), cb=cb)
-        SelectDialog(L('split'), opts, picked)
-
-    # ═══════════════════════ SETTINGS ═══════════════════════
-
-    def _tab_settings(self):
-        c, tok = self._content, self._tok
-        CW, CH = self._content_w, self._content_h
-
-        self.label(c, (CW / 2, CH - 24), "⚙  " + L('settings'),
-                   scale=1.0, color=self.pal['gold'], h='center')
-        self.divider(c, 20, CH - 40, CW - 40)
-
-        def cb(st):
-            if not self._alive(tok) or not isinstance(st, dict):
-                return
-
-            def cb_enrol(en):
-                if not self._alive(tok) or not isinstance(en, dict):
-                    return
-                taghide = st.get('taghide')
-                mode_txt = {None: L('direct'), 1: L('reqmode'),
-                            -1: L('closed')}.get(en.get('request'), '?')
-
-                rows = [
-                    ("📊", L('capacity'), str(st.get('capacity', '?')),
-                     L('buy'), self._buy_cap),
-                    ("🎯", L('gkick'), str(st.get('gkick', 1)),
-                     L('set'), lambda: self._edit_num('gkick', st.get('gkick', 1))),
-                    ("🕵", L('spynet'), fmt(st.get('spynet', 0)),
-                     L('set'), lambda: self._edit_num('spynet', st.get('spynet', 0))),
-                    ("🏷", L('tag'), L('active') if taghide is None else L('inactive'),
-                     None, None),
-                    ("💵", L('price'),
-                     fmt(st.get('price')) if st.get('price') else L('not_set'),
-                     L('set'), lambda: self._edit_num('price', st.get('price'))),
-                    ("__section__", L('enrol')),
-                    ("🔓", L('join_mode'), mode_txt,
-                     L('change'), self._change_mode),
-                    ("🪙", L('min_coin'), str(en.get('coin', '-')),
-                     L('set'), lambda: self._edit_enrol('coin', en.get('coin'))),
-                    ("🏆", L('top'), str(en.get('top', '-')),
-                     L('set'), lambda: self._edit_enrol('top', en.get('top'))),
-                    ("⭐", L('score'), str(en.get('score', '-')),
-                     L('set'), lambda: self._edit_enrol('score', en.get('score'))),
-                    ("🤖", L('bot'), L('forced') if en.get('bot') == 1 else L('off'),
-                     L('change'), self._toggle_bot),
-                ]
-
-                rh = 42
-                sc = bui.scrollwidget(
-                    parent=c, position=(0, 0),
-                    size=(CW, CH - 50),
-                    color=(0.4, 0.6, 0.3), border_opacity=0.0,
-                )
-                hh = max(rh * len(rows) + 10, CH - 50)
-                cont = bui.containerwidget(parent=sc, size=(CW - 12, hh), background=False)
-                rw = CW - 12
-                y = hh
-
-                for row in rows:
-                    y -= rh
-                    if row[0] == "__section__":
-                        self.label(cont, (rw / 2, y + rh / 2), "◆  " + row[1],
-                                   scale=0.8, color=self.pal['gold'], h='center')
-                        self.divider(cont, 20, y + 10, rw - 40)
-                        continue
-                    icon, k, v, btn_label, call = row
-                    self._row_bg(cont, rw, y, rh, self.pal['surface'])
-                    self.label(cont, (10, y + rh / 2), f"{icon}  {k}",
-                               scale=0.62, color=self.pal['text'],
-                               maxwidth=rw - 200)
-                    self.label(cont, (rw - 130, y + rh / 2), str(v),
-                               scale=0.6, color=self.pal['dim'],
-                               h='right', maxwidth=110)
-                    if btn_label:
-                        self.button(cont, (rw - 116, y + 8), (100, 26),
-                                    btn_label, call, kind='accent',
-                                    text_scale=0.55)
-            Net.fetch(self.api, "ally_enrol", cb=cb_enrol)
-        Net.fetch(self.api, "ally_settings", cb=cb)
-
-    def _edit_num(self, key, cur):
-        def cb(val):
-            def res(r):
-                if isinstance(r, dict) and 'err' in r:
-                    ToastStack.push(str(r['err']), 'error')
-                else:
-                    ToastStack.push(L('saved'), 'success')
-                    self._reload()
-            Net.fetch(self.api, "ally_save_setting", (key, val), cb=res)
-        NumberInputDialog(L(key), cur, cb)
-
-    def _edit_enrol(self, key, cur):
-        labels = {'coin': L('min_coin'), 'top': L('top'), 'score': L('score')}
-        def cb(val):
-            def res(r):
-                if isinstance(r, dict) and 'err' in r:
-                    ToastStack.push(str(r['err']), 'error')
-                else:
-                    ToastStack.push(L('saved'), 'success')
-                    self._reload()
-            Net.fetch(self.api, "ally_set_enrol", (key, val), cb=res)
-        NumberInputDialog(labels.get(key, key), cur, cb)
-
-    def _buy_cap(self):
-        def cb(r):
-            ok = (r == "1")
-            ToastStack.push(L('success') if ok else L('fail'),
-                            'success' if ok else 'error')
-            if ok:
-                self._reload()
-        Net.fetch(self.api, "ally_capacity", cb=cb)
-
-    def _change_mode(self):
-        opts = [(None, "🔓  " + L('direct')),
-                (1, "📩  " + L('reqmode')),
-                (-1, "🔒  " + L('closed'))]
-
-        def picked(req):
-            def res(r):
-                ToastStack.push(L('saved'), 'success')
-                self._reload()
-            Net.fetch(self.api, "ally_set_enrol", ("request", req), cb=res)
-        SelectDialog(L('join_mode'), opts, picked)
-
-    def _toggle_bot(self):
-        def cb_cur(r):
-            # Just toggle to opposite based on current
-            pass
-        # We don't have current value here — just try to toggle to 1
-        def res(r):
-            ToastStack.push(L('saved'), 'success')
-            self._reload()
-        Net.fetch(self.api, "ally_set_enrol", ("bot", 1), cb=res)
-
-    # ═══════════════════════ RANKING ═══════════════════════
-
-    def _tab_ranking(self):
-        c, tok = self._content, self._tok
-        CW, CH = self._content_w, self._content_h
-
-        self.label(c, (CW / 2, CH - 24), "🏆  " + L('ranking'),
-                   scale=1.0, color=self.pal['gold'], h='center')
-        self.divider(c, 20, CH - 40, CW - 40)
-
-        def cb(r):
-            if not self._alive(tok) or not isinstance(r, dict):
-                return
-            if not r.get('rank'):
-                self.label(c, (CW / 2, CH / 2), L('not_ranked'),
-                           scale=0.9, color=self.pal['dim'], h='center')
-                return
-
-            # Current rank hero
-            self.make_card(20, CH - 130, CW - 40, 80, r=14, kind='surface_hi')
-            self.label(c, (CW / 2, CH - 72), f"#{r.get('rank')}",
-                       scale=2.2, color=self.pal['gold'], h='center')
-            self.label(c, (CW / 2, CH - 106),
-                       f"{float(r.get('score', 0)):.2f} pts",
-                       scale=0.72, color=self.pal['success'], h='center')
-
-            # Members leaderboard
-            mdata = r.get('m_data') or {}
-            effective = [m for m in mdata.values() if m.get('c') == 1]
-            if not effective:
-                return
-
-            # Podium (top 3)
-            top3 = sorted(effective, key=lambda x: -float(x.get('s', 0)))[:3]
-            podium_y = CH - 200
-
-            medals = [("🥇", self.pal['gold']),
-                      ("🥈", self.pal['silver']),
-                      ("🥉", self.pal['bronze'])]
-
-            pw = (CW - 40) / 3
-            for i, m in enumerate(top3):
-                px = 20 + i * pw
-                self.make_card(px + 4, podium_y, pw - 8, 60, r=10, kind='surface')
-                self.label(c, (px + pw / 2, podium_y + 42), medals[i][0],
-                           scale=1.2, color=medals[i][1], h='center')
-                self.label(c, (px + pw / 2, podium_y + 22), m.get('n', '?'),
-                           scale=0.55, color=self.pal['text'],
-                           h='center', maxwidth=pw - 12)
-                self.label(c, (px + pw / 2, podium_y + 8),
-                           f"{float(m.get('s', 0)):.1f}",
-                           scale=0.5, color=self.pal['success'], h='center')
-
-            # Remaining members
-            remaining = effective[3:] if len(effective) > 3 else []
-            if not remaining:
-                return
-
-            sc = bui.scrollwidget(
-                parent=c, position=(0, 0),
-                size=(CW, podium_y - 8),
-                color=(0.4, 0.6, 0.3), border_opacity=0.0,
-            )
-            rh = 32
-            hh = max(rh * len(remaining) + 10, podium_y - 8)
-            cont = bui.containerwidget(parent=sc, size=(CW - 12, hh), background=False)
-            rw = CW - 12
-            y = hh
-            for m in remaining:
-                y -= rh
-                self._row_bg(cont, rw, y, rh, self.pal['surface'])
-                self.label(cont, (10, y + rh / 2),
-                           f"#{m.get('r', '?')}", scale=0.55,
-                           color=self.pal['dim'])
-                self.label(cont, (60, y + rh / 2), m.get('n', '?'),
-                           scale=0.62, color=self.pal['text'],
-                           maxwidth=rw - 150)
-                self.label(cont, (rw - 20, y + rh / 2),
-                           f"{float(m.get('s', 0)):.1f}",
-                           scale=0.6, color=self.pal['success'], h='right')
-        Net.fetch(self.api, "ally_ranking", cb=cb)
-
-    # ═══════════════════════ NEWS ═══════════════════════
-
-    def _tab_news(self):
-        self._news = []
-        self._load_news(None)
-
-    def _load_news(self, offset):
-        tok = self._tok
-        def cb(page):
-            if not self._alive(tok):
-                return
-            if isinstance(page, list):
-                self._news.extend(page)
-            self._render_news(tok, isinstance(page, list) and len(page) == 10)
-        Net.fetch(self.api, "ally_news", (offset,), cb=cb)
-
-    def _render_news(self, tok, has_more):
-        c, CW, CH = self._content, self._content_w, self._content_h
-        try:
-            for ch in c.get_children():
-                ch.delete()
-        except Exception:
-            pass
-        news = self._news
-        if not news:
-            self.label(c, (CW / 2, CH / 2), L('no_news'),
-                       scale=0.9, color=self.pal['dim'], h='center')
-            return
-
-        bottom = 40 if has_more else 0
-        sc = bui.scrollwidget(
-            parent=c, position=(0, bottom),
-            size=(CW, CH - bottom),
-            color=(0.4, 0.6, 0.3), border_opacity=0.0,
-        )
-        rh = 56
-        hh = max(rh * len(news) + 10, CH - bottom)
-        cont = bui.containerwidget(parent=sc, size=(CW - 12, hh), background=False)
-        rw = CW - 12
-        y = hh
-
-        for n in news:
-            y -= rh
-            self._row_bg(cont, rw, y, rh, self.pal['surface'])
-            # Accent bar
-            try:
-                bui.imagewidget(
-                    parent=cont, position=(4, y + 8),
-                    size=(3, rh - 16),
-                    texture=bui.gettexture('white'),
-                    color=self.pal['accent'],
-                )
-            except Exception:
-                pass
-            self.label(cont, (16, y + rh - 20), n.get('text', ''),
-                       scale=0.6, color=self.pal['text'],
-                       maxwidth=rw - 30)
-            self.label(cont, (16, y + 12), "🕒  " + n.get('time', ''),
-                       scale=0.48, color=self.pal['dim'])
-
-        if has_more:
-            self.button(c, (CW / 2 - 70, 4), (140, 32),
-                        "▼  " + L('more'),
-                        MyCall(self._load_news, news[-1].get('id')),
-                        kind='accent', text_scale=0.6)
-
-    # ═══════════════════════ CHAT ═══════════════════════
-
-    def _tab_chat(self):
-        c, tok = self._content, self._tok
-        CW, CH = self._content_w, self._content_h
-
-        self.label(c, (CW / 2, CH - 24), "💬  " + L('chat'),
-                   scale=1.0, color=self.pal['gold'], h='center')
-        self.divider(c, 20, CH - 40, CW - 40)
-
-        # Chat scroll
-        self._chat_sig = None
-        self._chat_scroll = bui.scrollwidget(
-            parent=c, position=(0, 48),
-            size=(CW, CH - 96),
-            color=(0.4, 0.6, 0.3), border_opacity=0.0,
-        )
-        self._chat_cont = bui.containerwidget(
-            parent=self._chat_scroll,
-            size=(CW - 12, CH - 96), background=False,
-        )
-
-        # Input
-        self._chat_inp = self.field(c, (0, 4), (CW - 92, 38),
-                                    "", max_chars=200, desc=L('msg_hint'))
-        self.button(c, (CW - 86, 4), (86, 38),
-                    "➤  " + L('send'), MyCall(self._send_chat),
-                    kind='accent', text_scale=0.6)
-
-        self._refresh_chat(tok, True)
-
-    def _refresh_chat(self, tok, loop):
-        def cb(history):
-            if not self._alive(tok) or self.tab != 'chat':
-                return
-            if isinstance(history, list):
-                sig = (len(history), str(history[-1]) if history else "")
-                if sig != self._chat_sig:
-                    self._chat_sig = sig
-                    try:
-                        self._render_chat(history[-60:])
-                    except Exception as e:
-                        log(f"chat render: {e}")
-            if loop and self.tab == 'chat':
-                _later(3.0, MyCall(self._refresh_chat, tok, True))
-        Net.fetch(self.api, "ally_chat_history", cb=cb)
-
-    def _render_chat(self, msgs):
-        CW, CH = self._content_w, self._content_h
-        if not self._chat_cont:
-            return
-        try:
-            for ch in self._chat_cont.get_children():
-                ch.delete()
-        except Exception:
-            pass
-        rh = 30
-        hh = max(rh * len(msgs) + 10, CH - 96)
-        try:
-            bui.containerwidget(edit=self._chat_cont, size=(CW - 12, hh))
-        except Exception:
-            pass
-        y = hh
-        for m in msgs:
-            y -= rh
-            mine = m.get('name') == self.api.user
-            col = self.pal['success'] if mine else self.pal['text']
-            prefix = "▶" if mine else "◆"
-            self.label(self._chat_cont, (8, y + rh / 2),
-                       f"{prefix} {m.get('name')}: {m.get('chat')}",
-                       scale=0.6, color=col, maxwidth=CW - 30)
-        try:
-            bui.scrollwidget(edit=self._chat_scroll, vertical_scroll=0.0)
-        except Exception:
-            pass
-
-    def _send_chat(self):
-        try:
-            msg = (bui.textwidget(query=self._chat_inp) or '').strip()
-        except Exception:
-            return
-        if not msg:
-            return
-        try:
-            bui.textwidget(edit=self._chat_inp, text="")
-        except Exception:
-            pass
-        tok = self._tok
-        Net.fetch(self.api, "ally_chat_send", (msg,),
-                  cb=lambda r: self._refresh_chat(tok, False))
-
-    # ═══════════════════════ CHANNELS ═══════════════════════
-
-    def _tab_channels(self):
-        c, CW, CH = self._content, self._content_w, self._content_h
-
-        self.label(c, (CW / 2, CH - 24), "★  " + L('channels'),
-                   scale=1.0, color=self.pal['gold'], h='center')
-        self.divider(c, 20, CH - 40, CW - 40)
-
-        # Channel card
-        self.make_card(40, CH - 200, CW - 80, 140, r=16, kind='surface_hi')
-        self.label(c, (CW / 2, CH - 85), "⭐",
-                   scale=3.5, color=self.pal['gold'], h='center')
-        self.label(c, (CW / 2, CH - 128), CHANNEL_NAME,
-                   scale=1.4, color=self.pal['text'], h='center')
-        self.label(c, (CW / 2, CH - 156), CHANNEL_HANDLE,
-                   scale=0.75, color=self.pal['dim'], h='center')
-
-        self.button(c, (CW / 2 - 130, CH - 226), (260, 48),
-                    "➤  " + L('open'), MyCall(self._open_channel),
-                    kind='accent', text_scale=0.85)
-
-        self.label(c, (CW / 2, CH - 260),
-                   "برای دریافت آخرین اخبار و بروزرسانی‌ها" if IS_FA
-                   else "For news & updates", scale=0.55,
-                   color=self.pal['dim'], h='center')
-
-    def _open_channel(self):
-        try:
-            bui.open_url(CHANNEL_URL)
-        except Exception as e:
-            log(f"open_url: {e}")
-            try:
-                if bui.clipboard_is_supported():
-                    bui.clipboard_set_text(CHANNEL_URL)
-                    ToastStack.push(CHANNEL_URL, 'info')
-            except Exception:
-                pass
-
-
-# ═══════════════════════════════════════════════════════════════
-# MEMBER ACTION WINDOW
-# ═══════════════════════════════════════════════════════════════
-
-class MemberActionWindow(Dialog):
-    COLORS = [("white", (1, 1, 1)), ("red", (1, 0.3, 0.3)),
-              ("blue", (0.3, 0.6, 1)), ("green", (0.3, 1, 0.3)),
-              ("yellow", (1, 1, 0.2)), ("orange", (1, 0.6, 0.2))]
-
-    def __init__(self, api, member, on_refresh):
-        W, H = 440, 380
-        super().__init__(W, H, f"👤  {L('manage')}: {member.get('name', '?')}")
-        self.api = api
-        self.member = member
-        self.on_refresh = on_refresh
-
-        existing_color = (member.get('title') or {}).get('c', 'white')
-        if not any(c[0] == existing_color for c in self.COLORS):
-            existing_color = "white"
-        self.color_choice = existing_color
-
-        self.make_card(12, 74, W - 24, H - 148, r=12, kind='surface')
-
-        # Title
-        self.label(self.root, (28, H - 100), "📝  " + L('title'),
-                   scale=0.62, color=self.pal['dim'])
-        self.inp_title = self.field(self.root, (100, H - 126),
-                                    (W - 130, 38),
-                                    (member.get('title') or {}).get('t', ''),
-                                    max_chars=20, desc=L('title'))
-
-        # Color swatches
-        self.label(self.root, (28, H - 160), "🎨  " + L('color'),
-                   scale=0.62, color=self.pal['dim'])
-        self._swatches = []
-        x = 100
-        for cname, crgb in self.COLORS:
-            b = bui.buttonwidget(
-                parent=self.root, position=(x, H - 178), size=(42, 32),
-                label="◆" if cname == existing_color else "",
-                color=crgb, textcolor=(0, 0, 0),
-                button_type='square', autoselect=True,
-                text_scale=0.7,
-                on_activate_call=MyCall(self._pick_color, cname),
-                texture=bui.gettexture('buttonSquare'),
-            )
-            self._swatches.append((b, cname))
-            x += 48
-
-        # Apply title
-        self.button(self.root, (28, H - 226), (W - 56, 40),
-                    "✓  " + L('apply_title'), MyCall(self._apply_title),
-                    kind='success', text_scale=0.7)
-
-        # Change role
-        self.button(self.root, (28, H - 274), (W - 56, 40),
-                    "🔁  " + L('change_role'),
-                    MyCall(self._open_role), kind='accent', text_scale=0.7)
-
-        # Mute / Kick
-        muted = member.get('muted')
-        self.button(self.root, (28, 24), (180, 42),
-                    ("🔊  " + L('unmute')) if muted else ("🔇  " + L('mute')),
-                    MyCall(self._toggle_mute),
-                    kind='success' if muted else 'surface', text_scale=0.65)
-        self.button(self.root, (W - 208, 24), (180, 42),
-                    "👢  " + L('kick'), MyCall(self._kick),
-                    kind='danger', text_scale=0.65)
-
-    def _pick_color(self, name):
-        self.color_choice = name
-        for b, n in self._swatches:
-            try:
-                bui.buttonwidget(edit=b, label="◆" if n == name else "")
-            except Exception:
-                pass
-
-    def _done(self, *_):
-        self.close()
-        try:
-            self.on_refresh()
-        except Exception:
-            pass
-
-    def _apply_title(self):
-        title = (bui.textwidget(query=self.inp_title) or '').strip()
-        Net.fetch(self.api, "ally_change_title",
-                  (self.member['id'], title, self.color_choice),
-                  cb=self._done)
-
-    def _open_role(self):
-        opts = [
-            (2, "🎖  " + L('general')),
-            (3, "🕵  " + L('spy')),
-            (None, "✕  " + L('remove_role')),
-        ]
-
-        def picked(role):
-            def cb(r):
-                if r == "1":
-                    ToastStack.push(L('role_changed'), 'success')
-                    AlertDialog(L('success'), L('role_changed'),
-                                kind='success', on_ok=self._done)
-                else:
-                    msg = {"too_many": L('role_full'),
-                           "no_bot": L('no_bot')}.get(r, L('fail'))
-                    AlertDialog(L('fail'), msg, kind='error')
-            Net.fetch(self.api, "ally_change_role",
-                      (self.member['id'], role), cb=cb)
-        SelectDialog(L('select'), opts, picked)
-
-    def _toggle_mute(self):
-        typ = "unmute" if self.member.get('muted') else "mute"
-        Net.fetch(self.api, "ally_mute",
-                  (self.member.get('name'), typ), cb=self._done)
-
-    def _kick(self):
-        def do():
-            Net.fetch(self.api, "ally_kick",
-                      (self.member['id'],), cb=self._done)
-        ConfirmDialog(L('kick'),
-                      f"{L('kick')}: {self.member.get('name', '?')} ?",
-                      do, danger=True)
-
-
-# ═══════════════════════════════════════════════════════════════
-# VAULT HISTORY WINDOWS
-# ═══════════════════════════════════════════════════════════════
-
-class VaultHistoryWindow(Dialog):
-    def __init__(self, api):
-        W, H = 540, 420
-        super().__init__(W, H, "📜  " + L('vault_hist'))
-        self.api = api
-
-        self._box = bui.containerwidget(
-            parent=self.root, position=(20, 20),
-            size=(W - 40, H - 98), background=False,
-        )
-        self.label(self._box, ((W - 40) / 2, (H - 98) / 2),
-                   L('loading') + "...", scale=0.8,
-                   color=self.pal['dim'], h='center')
-
-        Net.fetch(api, "ally_vault_news", (None,), cb=self._cb)
-
-    def _cb(self, news):
-        if not self.root.exists():
-            return
-        try:
-            for c in self._box.get_children():
-                c.delete()
-        except Exception:
-            pass
-        if not isinstance(news, list) or not news:
-            self.label(self._box, ((self.W - 40) / 2, (self.H - 98) / 2),
-                       L('no_news'), scale=0.8,
-                       color=self.pal['dim'], h='center')
-            return
-
-        CW = self.W - 40
-        CH = self.H - 98
-        sc = bui.scrollwidget(
-            parent=self._box, position=(0, 0),
-            size=(CW, CH),
-            color=(0.4, 0.6, 0.3), border_opacity=0.0,
-        )
-        rh = 42
-        hh = max(rh * len(news) + 10, CH)
-        cont = bui.containerwidget(parent=sc, size=(CW - 12, hh), background=False)
-        rw = CW - 12
-        y = hh
-
-        for n in news:
-            y -= rh
-            self._row_bg(cont, rw, y, rh, self.pal['surface'])
-            self.label(cont, (10, y + rh / 2), n.get('text', ''),
-                       scale=0.6, color=self.pal['text'],
-                       maxwidth=rw - 120)
-            if n.get('is_parent'):
-                self.button(cont, (rw - 100, y + 8), (90, 26),
-                            "📊  " + L('shares'),
-                            MyCall(self._open_shares, n.get('id')),
-                            kind='accent', text_scale=0.5)
-
-    def _row_bg(self, parent, rw, y, rh, color):
-        try:
-            bui.imagewidget(
-                parent=parent, position=(0, y + 2),
-                size=(rw, rh - 4),
-                texture=bui.gettexture('white'),
-                color=color, opacity=0.5,
-            )
-        except Exception:
-            pass
-
-    def _open_shares(self, tid):
-        VaultSharesWindow(self.api, tid)
-
-
-class VaultSharesWindow(Dialog):
-    def __init__(self, api, tid):
-        W, H = 400, 360
-        super().__init__(W, H, "📊  " + L('shares'))
-        self._box = bui.containerwidget(
-            parent=self.root, position=(20, 20),
-            size=(W - 40, H - 98), background=False,
-        )
-        self.label(self._box, ((W - 40) / 2, (H - 98) / 2),
-                   L('loading') + "...", scale=0.8,
-                   color=self.pal['dim'], h='center')
+        _later(0.2, MyCall(self._on, self._sel))
+
+
+class VaultSharesWindow(_Dialog):
+    def __init__(self, api, trans_id):
+        W, H = 380, 360
+        super().__init__(W, H, L("vault_shares"), extra=[(12, 12, W - 24, H - 82, 12, 'card')])
+        self._box = bui.containerwidget(parent=self.root, position=(20, 20), size=(W - 40, H - 98), background=False)
+        self.lbl(self._box, ((W - 40) / 2, (H - 98) / 2), L("loading"), 0.7, DIM, 'center')
 
         def cb(shares):
             if not self.root.exists():
@@ -2569,248 +1326,927 @@ class VaultSharesWindow(Dialog):
             except Exception:
                 pass
             if not isinstance(shares, list) or not shares:
-                self.label(self._box, ((W - 40) / 2, (H - 98) / 2),
-                           L('empty'), scale=0.8,
-                           color=self.pal['dim'], h='center')
+                self.lbl(self._box, ((W - 40) / 2, (H - 98) / 2), L("empty"), 0.7, DIM, 'center')
                 return
-
-            CW = W - 40
-            CH = H - 98
-            sc = bui.scrollwidget(
-                parent=self._box, position=(0, 0),
-                size=(CW, CH),
-                color=(0.4, 0.6, 0.3), border_opacity=0.0,
-            )
-            rh = 32
-            hh = max(rh * len(shares) + 10, CH)
-            cont = bui.containerwidget(parent=sc, size=(CW - 12, hh), background=False)
-            rw = CW - 12
+            sc, cont, hh = self.scroll(self._box, (0, 0), (W - 40, H - 98), len(shares), 28)
+            rw = W - 52
             y = hh
             for s in shares:
-                y -= rh
-                try:
-                    bui.imagewidget(
-                        parent=cont, position=(0, y + 2),
-                        size=(rw, rh - 4),
-                        texture=bui.gettexture('white'),
-                        color=self.pal['surface'], opacity=0.5,
-                    )
-                except Exception:
-                    pass
-                self.label(cont, (10, y + rh / 2), s.get('name', '?'),
-                           scale=0.6, color=self.pal['text'],
-                           maxwidth=rw - 120)
-                self.label(cont, (rw - 10, y + rh / 2), fmt(s.get('val', 0)),
-                           scale=0.6, color=self.pal['success'], h='right')
-        Net.fetch(api, "ally_vault_shares", (tid,), cb=cb)
+                y -= 28
+                self.bar(cont, 0, y + 2, rw, 24)
+                self.lbl(cont, (10, y + 14), s.get("name", "?"), 0.6, TXT, maxwidth=rw - 110)
+                self.lbl(cont, (rw - 10, y + 14), fmt(s.get("val", 0)), 0.6, GREEN, 'right')
+        Network.fetch(api, "ally_vault_shares", (trans_id,), callback=cb)
 
 
-# ═══════════════════════════════════════════════════════════════
-# HUB WINDOW (no ally)
-# ═══════════════════════════════════════════════════════════════
-
-class HubWindow(BaseWindow):
+class VaultHistoryWindow(_Dialog):
     def __init__(self, api):
-        W, H = 680, win_h()
-        super().__init__(W, H)
+        W, H = 520, 380
+        super().__init__(W, H, L("vault_news"), extra=[(12, 12, W - 24, H - 82, 12, 'card')])
         self.api = api
-        self._tab = "join"
-        self._order = "rank"
-        self._sub = None
-        self._tab_btns = {}
+        self._box = bui.containerwidget(parent=self.root, position=(20, 20), size=(W - 40, H - 98), background=False)
+        self.lbl(self._box, ((W - 40) / 2, (H - 98) / 2), L("loading"), 0.7, DIM, 'center')
 
-        # Header
-        self.make_card(12, H - 76, W - 24, 64, r=16, kind='header')
-        self._title = self.label(
-            self.root, (32, H - 48), u"\ue010  " + L('hub'),
-            scale=1.0, color=self.pal['gold'], maxwidth=400,
-        )
-        self.label(self.root, (32, H - 66), L('no_ally'),
-                   scale=0.5, color=self.pal['dim'])
-
-        self.button(self.root, (W - 206, H - 62), (60, 38), "◑",
-                    MyCall(self.cycle_theme), kind='surface')
-        self.button(self.root, (W - 138, H - 62), (54, 38), L('style'),
-                    MyCall(self.cycle_theme), kind='surface', text_scale=0.55)
-        self.button(self.root, (W - 76, H - 62), (60, 38), L('logout'),
-                    MyCall(self._logout), kind='danger', text_scale=0.55)
-
-        cb = bui.buttonwidget(
-            parent=self.root, position=(16, H - 66), size=(46, 46),
-            label=bui.charstr(bui.SpecialChar.CLOSE),
-            color=self.pal['danger'], textcolor=(1, 1, 1),
-            button_type='square', text_scale=0.9,
-            on_activate_call=MyCall(self.close_sound),
-            texture=bui.gettexture('buttonSquare'),
-        )
-        try:
-            bui.containerwidget(edit=self.root, cancel_button=cb)
-        except Exception:
-            pass
-
-        # Tab buttons
-        ty = H - 76 - 50
-        self._create_btn = self.button(
-            self.root, (16, ty), (W / 2 - 20, 44),
-            "➕  " + L('create'), MyCall(self._switch_tab, "create"),
-            kind='surface', text_scale=0.85,
-        )
-        self._join_btn = self.button(
-            self.root, (W / 2 + 4, ty), (W / 2 - 20, 44),
-            "🔍  " + L('join'), MyCall(self._switch_tab, "join"),
-            kind='accent', text_scale=0.85,
-        )
-
-        # Content
-        self._content_y = 16
-        self._content_h = ty - 16 - 12
-        self._content_x = 16
-        self._content_w = W - 32
-        self.make_card(12, self._content_y, W - 24, self._content_h,
-                       r=14, kind='surface')
-        self._new_sub()
-
-        self._switch_tab("join")
-
-    def _on_tick(self, elapsed, pal):
-        try:
-            bui.textwidget(edit=self._title, color=pal['gold'])
-        except Exception:
-            pass
-
-    def _new_sub(self):
-        if self._sub is not None:
-            try:
-                self._sub.delete()
-            except Exception:
-                pass
-        self._sub = bui.containerwidget(
-            parent=self.root,
-            position=(self._content_x, self._content_y),
-            size=(self._content_w, self._content_h),
-            background=False,
-        )
-
-    def _switch_tab(self, tab):
-        self._tab = tab
-        c_acc = self.pal['accent']
-        c_surf = self.pal['surface_hi']
-        try:
-            bui.buttonwidget(edit=self._create_btn,
-                             color=c_acc if tab == "create" else c_surf)
-            bui.buttonwidget(edit=self._join_btn,
-                             color=c_acc if tab == "join" else c_surf)
-        except Exception:
-            pass
-        self._new_sub()
-        if tab == "create":
-            self._render_create()
-        else:
-            self._render_join()
-
-    def _render_create(self):
-        c = self._sub
-        CW, CH = self._content_w, self._content_h
-
-        def cb(st):
+        def cb(news):
             if not self.root.exists():
                 return
-            if not isinstance(st, dict) or 'price' not in st:
-                if st == "0":
-                    AlertDialog(L('error'), L('already_ally'), kind='error')
+            try:
+                for c in self._box.get_children():
+                    c.delete()
+            except Exception:
+                pass
+            if not isinstance(news, list) or not news:
+                self.lbl(self._box, ((W - 40) / 2, (H - 98) / 2), L("no_news"), 0.7, DIM, 'center')
+                return
+            sc, cont, hh = self.scroll(self._box, (0, 0), (W - 40, H - 98), len(news), 32)
+            rw = W - 52
+            y = hh
+            for n in news:
+                y -= 32
+                self.bar(cont, 0, y + 2, rw, 28)
+                self.lbl(cont, (10, y + 16), n.get("text", ""), 0.55, TXT, maxwidth=rw - 110)
+                if n.get("is_parent"):
+                    self.btn(cont, (rw - 92, y + 5), (84, 22), L("shares_btn"), MyCall(VaultSharesWindow, api, n.get("id")), ts=0.55)
+        Network.fetch(api, "ally_vault_news", (None,), callback=cb)
+
+
+class MemberActionWindow(_Dialog):
+    COLORS = [("white", (1, 1, 1)), ("red", (1, 0.3, 0.3)), ("blue", (0.3, 0.6, 1)), ("green", (0.3, 1, 0.3)), ("yellow", (1, 1, 0.2)), ("orange", (1, 0.6, 0.2))]
+
+    def __init__(self, api, member, on_refresh):
+        W, H = 400, 340
+        super().__init__(W, H, f"{L('manage')}: {member.get('name', '?')}", extra=[(12, 12, W - 24, H - 82, 12, 'card')])
+        self.api, self.member, self.on_refresh = api, member, on_refresh
+        self.color_choice = {"name": "white"}
+        r = self.root
+        self.lbl(r, (28, H - 100), L('title') + ":", 0.65, DIM)
+        self.inp_title = self.field(r, (100, H - 118), (W - 130, 38), (member.get("title") or {}).get("t", ""), max_chars=20, desc=L('title'))
+        self.lbl(r, (28, H - 152), L('color') + ":", 0.65, DIM)
+        self._sw = []
+        x = 100
+        for cname, crgb in self.COLORS:
+            b = bui.buttonwidget(parent=r, position=(x, H - 166), size=(40, 28), label="*" if cname == "white" else "", color=crgb, textcolor=(0, 0, 0), button_type="square", autoselect=True, on_activate_call=MyCall(self._pick_color, cname))
+            self._sw.append((b, cname))
+            x += 46
+        self.btn(r, (28, H - 218), (W - 56, 36), L("apply_title"), self._apply_title, kind='join')
+        self.btn(r, (28, H - 262), (W - 56, 36), L("change_role"), self._open_role_menu)
+        muted = member.get("muted")
+        self.btn(r, (28, 24), (160, 38), L("unmute") if muted else L("mute"), self._toggle_mute)
+        self.btn(r, (W - 188, 24), (160, 38), L("kick"), self._kick, kind='danger')
+
+    def _pick_color(self, name):
+        self.color_choice["name"] = name
+        for b, n in self._sw:
+            try:
+                bui.buttonwidget(edit=b, label="*" if n == name else "")
+            except Exception:
+                pass
+
+    def _done(self, _r=None):
+        self.close()
+        try:
+            self.on_refresh()
+        except Exception:
+            pass
+
+    def _apply_title(self):
+        title = (bui.textwidget(query=self.inp_title) or '').strip()
+        Network.fetch(self.api, "ally_change_title", (self.member["id"], title, self.color_choice["name"]), callback=self._done)
+
+    def _open_role_menu(self):
+        opts = [(2, L("general")), (3, L("spy")), (None, L("remove_role"))]
+
+        def picked(role):
+            def cb(r):
+                if r == "1":
+                    Popup(L("success"), L("role_changed"), kind="success", on_ok=self._done)
                 else:
-                    AlertDialog(L('error'), str(st), kind='error')
+                    Popup(L("fail"), {"too_many": L("role_full"), "no_bot": L("no_bot")}.get(r, L("fail")), kind="error")
+            Network.fetch(self.api, "ally_change_role", (self.member["id"], role), callback=cb)
+        SelectDialog(L("select_role"), opts, picked)
+
+    def _toggle_mute(self):
+        typ = "unmute" if self.member.get("muted") else "mute"
+        Network.fetch(self.api, "ally_mute", (self.member.get("name"), typ), callback=self._done)
+
+    def _kick(self):
+        ConfirmDialog(L("kick"), f"{L('kick')}: {self.member.get('name', '?')} ?", lambda: Network.fetch(self.api, "ally_kick", (self.member["id"],), callback=self._done))
+
+# ═══════════════════════════════════════════════════════════════
+# 🔐 LOGIN WINDOW
+# ═══════════════════════════════════════════════════════════════
+
+class LoginWindow(_Win):
+    FX = True
+
+    def __init__(self, api, on_success):
+        global _top
+        W, H, P = 500, 340, 10
+        hy = H - P - 54
+        cards = [(P, hy, W - 2 * P, 54, 14, 'head'), (P, 196, W - 2 * P, 78, 12, 'card'), (130, 150, W - 150, 36, 8, 'field'), (130, 106, W - 150, 36, 8, 'field')]
+        super().__init__(W, H, cards, halos=[(W / 2, hy + 27, 120)])
+        _top = self
+        self.api, self.on_success = api, on_success
+        self._busy = False
+        self._status_base = ""
+        r = self.root
+        close = self.btn(r, (P + 6, hy + 7), (40, 40), bui.charstr(bui.SpecialChar.CLOSE), self.close_sound)
+        bui.containerwidget(edit=r, cancel_button=close)
+        self.title = self.lbl(r, (W / 2, hy + 37), u"\ue010 BSLIFE Ally", 0.95, GOLD, 'center', 300)
+        self.lbl(r, (W / 2, hy + 15), L("login_sub"), 0.45, (0.85, 0.93, 1.0), 'center', 300)
+        self.lbl(r, (W / 2, 252), L("login"), 0.8, GOLD, 'center')
+        self.lbl(r, (W / 2, 228), L("login_h1"), 0.55, TXT, 'center', W - 60)
+        self.lbl(r, (W / 2, 208), L("login_h2"), 0.55, TXT, 'center', W - 60)
+        self.lbl(r, (116, 168), L("username") + ":", 0.65, DIM, 'right')
+        self.lbl(r, (116, 124), L("otp") + ":", 0.65, DIM, 'right')
+        self.inp_user = bui.textwidget(parent=r, position=(138, 150), size=(W - 166, 36), editable=True, text="", autoselect=True, h_align='left', v_align='center', max_chars=30, maxwidth=W - 174, shadow=0.3, flatness=1.0, color=(1, 1, 1), description=L("username"))
+        self.inp_otp = bui.textwidget(parent=r, position=(138, 106), size=(W - 166, 36), editable=True, text="", autoselect=True, h_align='left', v_align='center', max_chars=8, maxwidth=W - 174, shadow=0.3, flatness=1.0, color=(1, 1, 1), description=L("otp"))
+        self.status = self.lbl(r, (W / 2, 82), "", 0.55, DIM, 'center', W - 60)
+        b = self.btn(r, (W / 2 - 160, 22), (150, 42), L("login"), self.do_login, kind='join')
+        self.btn(r, (W / 2 + 10, 22), (150, 42), L("cancel"), self.close_sound)
+        bui.containerwidget(edit=r, start_button=b)
+
+    def on_tick(self, el):
+        super().on_tick(el)
+        if self._busy:
+            self.set_status(self._status_base + "." * (int(el * 3) % 4), DIM)
+
+    def set_status(self, text, color=DIM):
+        try:
+            bui.textwidget(edit=self.status, text=text, color=color)
+        except Exception:
+            pass
+
+    def do_login(self):
+        if self._busy:
+            return
+        name = (bui.textwidget(query=self.inp_user) or '').strip()
+        otp = (bui.textwidget(query=self.inp_otp) or '').strip()
+        if not name or not otp:
+            self.set_status(L("error_fill"), RED)
+            bui.getsound('error').play()
+            return
+        self._busy = True
+        self._status_base = L("logging_in")
+
+        def worker():
+            ok, msg = self.api.login(name, otp)
+            bui.pushcall(MyCall(self._login_done, ok, msg), from_other_thread=True)
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _login_done(self, ok, msg):
+        self._busy = False
+        if not self.root.exists():
+            return
+        if ok:
+            self.set_status(L("success_loading"), GREEN)
+            if self.fx:
+                self.fx.burst()
+            _later(0.5, MyCall(self._go_next))
+        else:
+            self.set_status(f"{L('error')}: {msg}", RED)
+            bui.getsound('error').play()
+
+    def _go_next(self):
+        self.close()
+        _later(0.3, MyCall(self.on_success))
+
+# ═══════════════════════════════════════════════════════════════
+# 🏰 ALLY MAIN WINDOW
+# ═══════════════════════════════════════════════════════════════
+
+class AllyMainWindow(_Win):
+    FX = True
+    TABS = ["overview", "members", "requests", "vault", "settings", "ranking", "news", "chat", "channels"]
+
+    def __init__(self, api):
+        global _top
+        W, H, P = 620, _win_h(), 10
+        hy = H - P - 54
+        y0 = P + 34 + 6
+        y1 = hy - 8
+        ch = y1 - y0
+        side_w = 118
+        cx = P + side_w + 8
+        cw = W - P - cx
+        # Layout coordinates:
+        # Top header (P, hy, W-2P, 54)
+        # Left sidebar (P, y0, side_w, ch)
+        # Main content (cx, y0, cw, ch)
+        # Bottom bar (P, P, W-2P, 34)
+        cards = [
+            (P, hy, W - 2 * P, 54, 14, 'head'), 
+            (P, y0, side_w, ch, 12, 'card'), 
+            (cx, y0, cw, ch, 12, 'card'), 
+            (P, P, W - 2 * P, 34, 10, 'head')
+        ]
+        super().__init__(W, H, cards, halos=[(W - 90, hy + 27, 100), (P + side_w / 2, y0 + ch / 2, 90)])
+        _top = self
+        self.api = api
+        
+        # Start on Channels to show off the default theme
+        self.current_tab = "channels"
+        self._req_filter = "new"
+        self._tok = 0
+        self._closing = False
+        self._news: List[Any] = []
+        self._chat_sig = None
+        self._geo = (P, y0, ch, side_w)
+        self.CW, self.CH = cw - 16, ch - 16
+        self._cx, self._cy = cx + 8, y0 + 8
+        r = self.root
+
+        # ─── HEADER ───
+        # Close Button (Huge X on the left)
+        close = self.btn(r, (P + 6, hy + 7), (40, 40), bui.charstr(bui.SpecialChar.CLOSE), self.close_sound, ts=1.0)
+        bui.containerwidget(edit=r, cancel_button=close)
+        
+        # Title & Subtitle
+        self.title = self.lbl(r, (W / 2, hy + 37), u"\ue010 BSLIFE Ally", 0.95, GOLD, 'center', 300)
+        self.head_sub = self.lbl(r, (W / 2, hy + 15), f"{L('user')}: ...", 0.45, (0.85, 0.93, 1.0), 'center', 300)
+        
+        # Top right buttons
+        self.btn(r, (W - P - 6 - 74, hy + 9), (74, 36), L("logout"), self._do_logout, kind='danger', ts=0.8)
+        self.btn(r, (W - P - 6 - 74 - 8 - 64, hy + 9), (64, 36), L("style"), self.cycle_style, ts=0.8)
+        
+        # ─── FOOTER ───
+        self.status_line = self.lbl(r, (W / 2, P + 17), "", 0.55, DIM, 'center', W - 60)
+
+        # ─── SIDEBAR & CONTENT ───
+        self.tab_buttons: Dict[str, Any] = {}
+        self.content = None
+        self._new_content()
+        self._render_sidebar()
+        self.refresh()
+
+    def _alive(self, tok):
+        try:
+            return (not self._closing) and tok == self._tok and self.root.exists()
+        except Exception:
+            return False
+
+    def _new_content(self):
+        if self.content is not None:
+            try:
+                self.content.delete()
+            except Exception:
+                pass
+        self.content = bui.containerwidget(parent=self.root, position=(self._cx, self._cy), size=(self.CW, self.CH), background=False)
+        self._tok += 1
+        return self.content
+
+    def _reload(self, *_a):
+        if self._closing or not self.root.exists():
+            return
+        self._new_content()
+        self._render_current()
+
+    def set_status(self, text, color=DIM):
+        try:
+            bui.textwidget(edit=self.status_line, text=text, color=color)
+        except Exception:
+            pass
+
+    def close(self):
+        self._closing = True
+        self._tok += 1
+        super().close()
+
+    def _do_logout(self):
+        self.api.logout()
+        self.close()
+        LoginWindow(self.api, _route_after_login)
+
+    def _render_sidebar(self):
+        """Draws the sidebar tabs."""
+        for b in self.tab_buttons.values():
+            try:
+                b.delete()
+            except Exception:
+                pass
+        self._btns = [e for e in self._btns if not (isinstance(e[2], str) and e[2].startswith("tab:"))]
+        self.tab_buttons = {}
+        P, y0, ch, side_w = self._geo
+        
+        # Filter tabs based on role
+        tabs = [k for k in self.TABS if not (k in ("requests", "settings") and self.api.roleid not in (1, 2))]
+        
+        n = len(tabs)
+        gap = 3
+        th = min(32, (ch - 12 - (n - 1) * gap) / n)
+        y = y0 + ch - 6 - th
+        
+        for key in tabs:
+            self.tab_buttons[key] = self.btn(
+                self.root, (P + 7, y), (side_w - 14, th), L(key), MyCall(self.switch_tab, key),
+                kind='join' if key == self.current_tab else 'accent', ts=0.8, key="tab:" + key
+            )
+            y -= th + gap
+
+    def switch_tab(self, key):
+        if self._closing:
+            return
+        self.current_tab = key
+        for k in self.tab_buttons:
+            self.setkind("tab:" + k, 'join' if k == key else 'accent')
+        if self.fx:
+            self.fx.pulse()
+        self._reload()
+
+    def refresh(self):
+        self.set_status(L("loading"), DIM)
+        Network.fetch(self.api, "ally_status", callback=self._on_status)
+
+    def _on_status(self, st):
+        if self._closing or not self.root.exists():
+            return
+        if st in ("3", "0", "", None):
+            self.set_status(L("session_retry"), DIM)
+
+            def check(who):
+                if who:
+                    self.refresh()
+                else:
+                    self.set_status(L("session_expired"), RED)
+                    self._do_logout()
+            Network.fetch(self.api, "whoami", callback=check)
+            return
+        if not isinstance(st, dict):
+            self.close()
+            HubWindow(self.api)
+            return
+        if "error" in st and "name" not in st:
+            self.set_status(f"{L('error')}: {st['error']}", RED)
+            return
+        self.api.ally = st.get("name")
+        self.api.roleid = st.get("roleid")
+        self.api.memberid = st.get("memberid")
+        try:
+            bui.textwidget(edit=self.title, text=u"\ue010 " + f"{st.get('name') or L('no_ally')} ({role_name(st.get('roleid'))})")
+            bui.textwidget(edit=self.head_sub, text=f"{L('user')}: {self.api.user or '?'}")
+        except Exception:
+            pass
+        self.set_status(L("ready"), GREEN)
+        self._render_sidebar()
+        self._reload()
+
+    def _render_current(self):
+        handler = getattr(self, "_tab_" + self.current_tab, None)
+        if handler:
+            try:
+                handler()
+            except Exception as e:
+                log(f"Render EXCEPTION {self.current_tab}: {e}")
+
+    # ─── TABS ───
+
+    def _tab_overview(self):
+        c, tok, CW, CH = self.content, self._tok, self.CW, self.CH
+
+        def cb(st):
+            if not self._alive(tok) or not isinstance(st, dict):
+                return
+            self.lbl(c, (CW / 2, CH - 16), L("overview"), 0.95, GOLD, 'center')
+            
+            rows = [
+                (L('alliance_name'), str(st.get("name")), TXT),
+                (L('your_role'), role_name(st.get("roleid")), role_color(st.get("roleid"))),
+                (L('members_count'), str(st.get("count", "?")), TXT)
+            ]
+            
+            y = CH - 40
+            for k, v, col in rows:
+                y -= 44
+                self.bar(c, 0, y, CW, 38)
+                self.lbl(c, (14, y + 19), k + ":", 0.7, DIM)
+                self.lbl(c, (CW - 14, y + 19), v, 0.75, col, 'right', CW / 2)
+                
+            if self.api.roleid != 1:
+                self.btn(c, (CW / 2 - 90, 4), (180, 38), L("leave_ally"), self._confirm_leave, kind='danger')
+        Network.fetch(self.api, "ally_status", callback=cb)
+
+    def _confirm_leave(self):
+        def do_leave():
+            def cb(r):
+                if r == "1":
+                    self.close()
+                    _later(0.5, MyCall(_route_after_login))
+            Network.fetch(self.api, "ally_leave", callback=cb)
+        ConfirmDialog(L("leave_ally"), L("leave_confirm"), do_leave)
+
+    def _tab_members(self):
+        c, tok, CW, CH = self.content, self._tok, self.CW, self.CH
+
+        def cb(members):
+            if not self._alive(tok):
+                return
+            if not isinstance(members, list):
+                if members in ("3", "", "-1"):
+                    self._on_status("3")
+                return
+            if not members:
+                self.lbl(c, (CW / 2, CH / 2), L("empty"), 0.8, DIM, 'center')
+                return
+                
+            sc, cont, hh = self.scroll(c, (0, 0), (CW, CH), len(members), 32)
+            rw = CW - 12
+            y = hh
+            
+            for m in members:
+                y -= 32
+                is_me = m.get("id") == self.api.memberid
+                self.bar(cont, 0, y + 2, rw, 28, me=is_me)
+                self.lbl(cont, (10, y + 16), role_name(m.get("roleid")), 0.6, role_color(m.get("roleid")), maxwidth=80)
+                self.lbl(cont, (96, y + 16), m.get("name", "?"), 0.65, TXT, maxwidth=rw - 240)
+                
+                if m.get("muted"):
+                    self.lbl(cont, (rw - 64, y + 16), L("mute"), 0.5, RED, 'right')
+                if self.api.roleid in (1, 2) and not is_me:
+                    self.btn(cont, (rw - 54, y + 5), (46, 22), "...", MyCall(self._open_member, m), ts=0.7)
+        Network.fetch(self.api, "ally_members", callback=cb)
+
+    def _open_member(self, m):
+        MemberActionWindow(self.api, m, self._reload)
+
+    def _tab_requests(self):
+        c, tok, CW, CH = self.content, self._tok, self.CW, self.CH
+        bw = (CW - 12) / 3
+        
+        for i, key in enumerate(["new", "accepted", "rejected"]):
+            self.btn(c, (i * (bw + 6), CH - 30), (bw, 30), L(key), MyCall(self._set_req_filter, key),
+                     kind='join' if key == self._req_filter else 'accent')
+
+        def cb(reqs):
+            if not self._alive(tok):
+                return
+            if not isinstance(reqs, list):
+                return
+            if not reqs:
+                self.lbl(c, (CW / 2, (CH - 36) / 2), L("empty"), 0.8, DIM, 'center')
+                return
+                
+            sc, cont, hh = self.scroll(c, (0, 0), (CW, CH - 38), len(reqs), 34)
+            rw = CW - 12
+            y = hh
+            
+            for r in reqs:
+                y -= 34
+                self.bar(cont, 0, y + 2, rw, 30)
+                self.lbl(cont, (10, y + 17), r.get("name", "?"), 0.65, TXT, maxwidth=rw - 150)
+                if self._req_filter == "new":
+                    self.btn(cont, (rw - 140, y + 5), (64, 24), L("yes"), MyCall(self._handle_req, r, "accept"),
+                             kind='join', ts=0.6)
+                    self.btn(cont, (rw - 70, y + 5), (64, 24), L("no"), MyCall(self._handle_req, r, "reject"),
+                             kind='danger', ts=0.6)
+        Network.fetch(self.api, "ally_requests", (self._req_filter,), callback=cb)
+
+    def _set_req_filter(self, key):
+        self._req_filter = key
+        self._reload()
+
+    def _handle_req(self, r, mode):
+        Network.fetch(self.api, "ally_handle_request", (r.get("id"), mode), callback=self._reload)
+
+    def _tab_vault(self):
+        c, tok, CW, CH = self.content, self._tok, self.CW, self.CH
+
+        def cb(v):
+            if not self._alive(tok) or not isinstance(v, dict):
+                return
+            
+            # Hero balance card
+            self.bar(c, 0, CH - 110, CW, 100)
+            self.lbl(c, (CW / 2, CH - 52), fmt(v.get("coin", 0)), 1.6, GOLD, 'center', CW - 30)
+            self.lbl(c, (CW / 2, CH - 86), L("coins"), 0.65, DIM, 'center')
+            
+            btns = [
+                (L("deposit"), self._open_deposit, 'join'),
+                (L("history"), self._open_vault_history, 'accent')
+            ]
+            if self.api.roleid in (1, 2):
+                btns.append((L("split"), self._open_split, 'accent'))
+                
+            bw = min(150, (CW - 10 * (len(btns) - 1)) / len(btns))
+            x = (CW - (bw * len(btns) + 10 * (len(btns) - 1))) / 2
+            
+            for label, call, kind in btns:
+                self.btn(c, (x, CH - 170), (bw, 44), label, call, kind=kind)
+                x += bw + 10
+        Network.fetch(self.api, "ally_vault_status", callback=cb)
+
+    def _open_vault_history(self):
+        VaultHistoryWindow(self.api)
+
+    def _open_deposit(self):
+        def do_deposit(amount):
+            if amount is None:
+                return
+            if amount < 100:
+                Popup(L("fail"), L("min_deposit"), kind="error")
                 return
 
-            # Cost card
-            self.make_card(40, CH - 130, CW - 80, 90, r=12, kind='surface_hi')
-            self.label(c, (CW / 2, CH - 78), "💰  " + L('cost'),
-                       scale=0.7, color=self.pal['dim'], h='center')
-            self.label(c, (CW / 2, CH - 108), f"{fmt(st['price'])} {L('coins')}",
-                       scale=1.2, color=self.pal['gold'], h='center')
+            def cb(r):
+                if r == "1":
+                    Popup(L("success"), L("deposit_ok"), kind="success", on_ok=self._reload)
+                else:
+                    Popup(L("fail"), L("not_enough_coins") if r == "coin_not_enough" else L("fail"), kind="error")
+            Network.fetch(self.api, "ally_vault_add", (amount,), callback=cb)
+        NumberInputPopup(L("enter_amount"), "", do_deposit)
 
-            # Name input
-            self.label(c, (CW / 2, CH - 168), "🏰  " + L('name_hint'),
-                       scale=0.62, color=self.pal['dim'], h='center')
-            self.inp_name = self.field(c, (CW / 2 - 150, CH - 216),
-                                       (300, 40), "", max_chars=15,
-                                       desc=L('name_hint'))
+    def _open_split(self):
+        opts = [("equal_all", L("equal_all")), ("equal_ranking", L("equal_ranking")), ("ranking_points", L("ranking_points"))]
 
-            self.button(c, (CW / 2 - 110, CH - 276), (220, 48),
-                        "⚡  " + L('create'),
-                        MyCall(self._do_create), kind='accent',
-                        text_scale=0.85)
+        def picked(typ):
+            def cb(r):
+                if r == "1":
+                    Popup(L("success"), L("vault_split_ok"), kind="success", on_ok=self._reload)
+                else:
+                    Popup(L("fail"), {"coin_not_enough": L("not_enough_coins"), "no_ranking_info": L("no_ranking")}.get(r, L("fail")), kind="error")
+            Network.fetch(self.api, "ally_vault_clear", (typ,), callback=cb)
+        SelectDialog(L("select_type"), opts, picked)
 
-        Net.fetch(self.api, "create_status", cb=cb)
+    def _tab_settings(self):
+        c, tok, CW, CH = self.content, self._tok, self.CW, self.CH
+
+        def cb_settings(st):
+            if not self._alive(tok) or not isinstance(st, dict):
+                return
+
+            def cb_enrol(en):
+                if not self._alive(tok) or not isinstance(en, dict):
+                    return
+                
+                taghide = st.get("taghide")
+                mode_txt = {None: L("mode_direct"), 1: L("mode_request"), -1: L("mode_closed")}.get(en.get("request"), "?")
+                
+                rows = [
+                    (f"{L('capacity')}: {st.get('capacity', '?')}", TXT, L("buy_1"), self._buy_capacity),
+                    (f"{L('gkick')}: {st.get('gkick', 1)}", TXT, L("set"), MyCall(self._set_gkick, st.get('gkick', 1))),
+                    (f"{L('spynet')}: {fmt(st.get('spynet', 0))}", TXT, L("set"), MyCall(self._set_spynet, st.get('spynet', 0))),
+                    (f"{L('tag_status')}: {L('tag_active') if taghide is None else L('tag_inactive')}", GREEN if taghide is None else RED, None, None),
+                    (f"{L('sale_price')}: {fmt(st.get('price')) if st.get('price') else L('not_set')}", TXT, L("set"), MyCall(self._set_price, st.get('price'))),
+                    ('__h__', L("enrol_settings")),
+                    (f"{L('join_mode')}: {mode_txt}", TXT, L("change"), self._change_join_mode),
+                    (f"{L('min_coin')}: {en.get('coin', '-')}", TXT, L("set"), MyCall(self._set_enrol, "coin", en.get("coin"))),
+                    (f"{L('req_top')}: {en.get('top', '-')}", TXT, L("set"), MyCall(self._set_enrol, "top", en.get("top"))),
+                    (f"{L('min_score')}: {en.get('score', '-')}", TXT, L("set"), MyCall(self._set_enrol, "score", en.get("score"))),
+                    (f"{L('bot_link')}: {L('forced') if en.get('bot') == 1 else L('off')}", TXT, L("toggle"), MyCall(self._toggle_enrol_bot, en.get("bot"))),
+                ]
+                
+                RH = 38
+                sc, cont, hh = self.scroll(c, (0, 0), (CW, CH), len(rows), RH)
+                rw = CW - 12
+                y = hh
+                
+                for row in rows:
+                    y -= RH
+                    if row[0] == '__h__':
+                        self.lbl(cont, (rw / 2, y + RH / 2), row[1], 0.8, GOLD, 'center')
+                        continue
+                    text, col, blabel, call = row
+                    self.bar(cont, 0, y + 2, rw, RH - 4)
+                    self.lbl(cont, (10, y + RH / 2), text, 0.62, col, maxwidth=rw - 130)
+                    if blabel:
+                        self.btn(cont, (rw - 110, y + 6), (102, RH - 12), blabel, call, ts=0.65)
+                        
+            Network.fetch(self.api, "ally_enrol", callback=cb_enrol)
+        Network.fetch(self.api, "ally_settings", callback=cb_settings)
+
+    def _save_setting(self, key, val):
+        def cb(r):
+            if isinstance(r, dict) and "err" in r:
+                Popup(L("fail"), str(r["err"]), kind="error")
+            else:
+                Popup(L("success"), L("saved"), kind="success", on_ok=self._reload)
+        Network.fetch(self.api, "ally_save_setting", (key, val), callback=cb)
+
+    def _set_gkick(self, cur): NumberInputPopup(L("gkick"), cur, lambda v: self._save_setting("gkick", v))
+    def _set_spynet(self, cur): NumberInputPopup(L("spynet"), cur, lambda v: self._save_setting("spynet", v))
+    def _set_price(self, cur): NumberInputPopup(L("sale_price"), cur, lambda v: self._save_setting("price", v))
+
+    def _buy_capacity(self):
+        Network.fetch(self.api, "ally_capacity", callback=lambda r: Popup(L("success") if r == "1" else L("fail"), "", kind="success" if r == "1" else "error", on_ok=self._reload))
+
+    def _change_join_mode(self):
+        opts = [(None, L("mode_direct")), (1, L("mode_request")), (-1, L("mode_closed"))]
+
+        def picked(req):
+            def res_cb(r):
+                name = L("mode_direct") if req is None else L("mode_request") if req == 1 else L("mode_closed")
+                Popup(L("success"), f"{L('join_mode')}: {name}", kind="success", on_ok=self._reload)
+            Network.fetch(self.api, "ally_set_enrol", ("request", req), callback=res_cb)
+        SelectDialog(L("select_mode"), opts, picked)
+
+    def _set_enrol(self, key, cur):
+        def cb(val):
+            def res_cb(r):
+                if isinstance(r, dict) and "err" in r:
+                    Popup(L("fail"), str(r["err"]), kind="error")
+                else:
+                    Popup(L("success"), L("saved"), kind="success", on_ok=self._reload)
+            Network.fetch(self.api, "ally_set_enrol", (key, val), callback=res_cb)
+        NumberInputPopup({"coin": L("min_coin"), "top": L("req_top"), "score": L("min_score")}.get(key, key), cur, cb)
+
+    def _toggle_enrol_bot(self, cur):
+        val = None if cur == 1 else 1
+
+        def res_cb(r):
+            Popup(L("success"), f"{L('bot_link')}: {L('forced') if val == 1 else L('off')}", kind="success", on_ok=self._reload)
+        Network.fetch(self.api, "ally_set_enrol", ("bot", val), callback=res_cb)
+
+    def _tab_ranking(self):
+        c, tok, CW, CH = self.content, self._tok, self.CW, self.CH
+
+        def cb(r):
+            if not self._alive(tok) or not isinstance(r, dict):
+                return
+            self.lbl(c, (CW / 2, CH - 16), L("ranking"), 0.95, GOLD, 'center')
+            if not r.get("rank"):
+                self.lbl(c, (CW / 2, CH / 2), L("not_ranked"), 0.85, DIM, 'center')
+                return
+            
+            self.bar(c, 0, CH - 70, CW, 36)
+            self.lbl(c, (CW / 2, CH - 52), f"#{r.get('rank')}  |  {float(r.get('score', 0)):.2f} pts", 0.9, GREEN, 'center')
+            
+            effective = [m for m in (r.get("m_data") or {}).values() if m.get("c") == 1]
+            if not effective:
+                return
+                
+            sc, cont, hh = self.scroll(c, (0, 0), (CW, CH - 78), len(effective), 28)
+            rw = CW - 12
+            y = hh
+            for m in effective:
+                y -= 28
+                self.bar(cont, 0, y + 2, rw, 24)
+                self.lbl(cont, (10, y + 14), f"#{m.get('r', '?')}  {m.get('n', '?')}", 0.6, TXT, maxwidth=rw - 100)
+                self.lbl(cont, (rw - 10, y + 14), f"{float(m.get('s', 0)):.1f}", 0.6, GREEN, 'right')
+        Network.fetch(self.api, "ally_ranking", callback=cb)
+
+    def _tab_news(self):
+        self._news = []
+        self._load_news(None)
+
+    def _load_news(self, offset):
+        tok = self._tok
+
+        def cb(page):
+            if not self._alive(tok):
+                return
+            if isinstance(page, list):
+                self._news.extend(page)
+            self._render_news(tok, isinstance(page, list) and len(page) == 10)
+        Network.fetch(self.api, "ally_news", (offset,), callback=cb)
+
+    def _render_news(self, tok, has_more):
+        c, CW, CH = self.content, self.CW, self.CH
+        try:
+            for ch in c.get_children():
+                ch.delete()
+        except Exception:
+            pass
+            
+        news = self._news
+        if not news:
+            self.lbl(c, (CW / 2, CH / 2), L("no_news"), 0.85, DIM, 'center')
+            return
+            
+        bottom = 36 if has_more else 0
+        sc, cont, hh = self.scroll(c, (0, bottom), (CW, CH - bottom), len(news), 42)
+        rw = CW - 12
+        y = hh
+        
+        for n in news:
+            y -= 42
+            self.bar(cont, 0, y + 2, rw, 38)
+            self.lbl(cont, (10, y + 26), n.get("text", ""), 0.55, TXT, maxwidth=rw - 20)
+            self.lbl(cont, (10, y + 10), n.get("time", ""), 0.42, DIM, maxwidth=rw - 20)
+            
+        if has_more:
+            self.btn(c, (CW / 2 - 60, 2), (120, 30), L("more"), MyCall(self._load_news, news[-1].get("id")), kind='join', ts=0.7)
+
+    def _tab_chat(self):
+        c, tok, CW, CH = self.content, self._tok, self.CW, self.CH
+        self._chat_sig = None
+        self.chat_scroll = bui.scrollwidget(parent=c, position=(0, 42), size=(CW, CH - 42), color=(0.4, 0.6, 0.3), border_opacity=0.0)
+        self.chat_container = bui.containerwidget(parent=self.chat_scroll, size=(CW - 12, CH - 42), background=False)
+        self.chat_inp = self.field(c, (0, 0), (CW - 90, 36), "", max_chars=200, desc=L("message"))
+        self.btn(c, (CW - 84, 0), (84, 36), L("send"), self._send_chat, kind='join', ts=0.8)
+        self._refresh_chat(tok, True)
+
+    def _refresh_chat(self, tok, loop):
+        def cb(history):
+            if not self._alive(tok) or self.current_tab != "chat":
+                return
+            if isinstance(history, list):
+                sig = (len(history), str(history[-1]) if history else "")
+                if sig != self._chat_sig:
+                    self._chat_sig = sig
+                    try:
+                        self._render_chat(history[-50:])
+                    except Exception as e:
+                        log(f"chat render: {e}")
+            if loop:
+                _later(3.0, MyCall(self._refresh_chat, tok, True))
+        Network.fetch(self.api, "ally_chat_history", callback=cb)
+
+    def _render_chat(self, msgs):
+        CW, CH = self.CW, self.CH
+        for ch in self.chat_container.get_children():
+            ch.delete()
+        rh = 24
+        hh = max(rh * len(msgs) + 6, CH - 42)
+        bui.containerwidget(edit=self.chat_container, size=(CW - 12, hh))
+        y = hh
+        for m in msgs:
+            y -= rh
+            mine = m.get('name') == self.api.user
+            self.lbl(self.chat_container, (6, y + rh / 2), f"{m.get('name')}: {m.get('chat')}", 0.6, GREEN if mine else TXT, maxwidth=CW - 30)
+        try:
+            bui.scrollwidget(edit=self.chat_scroll, vertical_scroll=0.0)
+        except Exception:
+            pass
+
+    def _send_chat(self):
+        try:
+            msg = (bui.textwidget(query=self.chat_inp) or '').strip()
+        except Exception:
+            return
+        if not msg:
+            return
+        bui.textwidget(edit=self.chat_inp, text="")
+        tok = self._tok
+        Network.fetch(self.api, "ally_chat_send", (msg,), callback=lambda r: self._refresh_chat(tok, False))
+
+    # ═══════════════════════════════════════════════════════════════
+    # 🎯 CHANNELS TAB (Customized for Tajer Only)
+    # ═══════════════════════════════════════════════════════════════
+    def _tab_channels(self):
+        c, CW, CH = self.content, self.CW, self.CH
+        
+        # Header
+        self.lbl(c, (CW / 2, CH - 18), "Channels :", 1.2, GOLD, 'center')
+        
+        # Main glowing box for Tajer
+        # Using a very dark background with a bright gold border to mimic the image
+        bw = min(350, CW - 40)
+        x = (CW - bw) / 2
+        y = CH / 2 - 40
+        
+        # Draw the massive glowing box
+        self.bar(c, x, y, bw, 80) # Background
+        # Outer Border (Gold)
+        try:
+            bui.imagewidget(parent=c, position=(x, y), size=(bw, 80), texture=bui.gettexture('softRect'), color=GOLD, opacity=0.8)
+            bui.imagewidget(parent=c, position=(x+2, y+2), size=(bw-4, 76), texture=bui.gettexture('softRect'), color=(0.05, 0.04, 0.03), opacity=1.0)
+        except Exception:
+            pass
+            
+        # Text
+        self.lbl(c, (CW / 2, y + 40), "Tajer", 1.5, TXT, 'center')
+        
+        # Invisible Button for clicking
+        self.btn(c, (x, y), (bw, 80), "", MyCall(self._open_link, "https://t.me/Tajerbetbot"), kind='accent')
+        
+        # Footer text
+        self.lbl(c, (CW / 2, y - 30), "Theme: Valhalla", 0.6, DIM, 'center')
+
+    def _open_link(self, url):
+        try:
+            bui.open_url(url)
+        except Exception as e:
+            log(f"open_url failed: {e}")
+            try:
+                if bui.clipboard_is_supported():
+                    bui.clipboard_set_text(url)
+                    bui.screenmessage(url, color=(0.5, 1, 0.7))
+            except Exception:
+                pass
+
+# ═══════════════════════════════════════════════════════════════
+# 🏛️ HUB WINDOW (If not in an alliance)
+# ═══════════════════════════════════════════════════════════════
+
+class HubWindow(_Win):
+    FX = True
+
+    def __init__(self, api):
+        global _top
+        W, H, P = 620, _win_h(), 10
+        hy = H - P - 54
+        ty = hy - 6 - 34
+        top = ty - 6
+        ch = top - P
+        cards = [(P, hy, W - 2 * P, 54, 14, 'head'), (P, P, W - 2 * P, ch, 12, 'card')]
+        super().__init__(W, H, cards, halos=[(W - 90, hy + 27, 100)])
+        _top = self
+        self.api = api
+        self.IW, self.IH = W - 2 * P - 16, ch - 16
+        self._ix, self._iy = P + 8, P + 8
+        self.sub = None
+        self.order_type = "rank"
+        self._tab = "join"
+        r = self.root
+        
+        close = self.btn(r, (P + 6, hy + 7), (40, 40), bui.charstr(bui.SpecialChar.CLOSE), self.close_sound)
+        bui.containerwidget(edit=r, cancel_button=close)
+        self.title = self.lbl(r, (W / 2, hy + 37), u"\ue010 " + L("hub_title"), 0.95, GOLD, 'center', 300)
+        self.lbl(r, (W / 2, hy + 15), L("not_in_ally"), 0.45, (0.85, 0.93, 1.0), 'center', 300)
+        self.btn(r, (W - P - 6 - 74, hy + 9), (74, 36), L("logout"), self._do_logout, kind='danger')
+        self.btn(r, (W - P - 6 - 74 - 8 - 64, hy + 9), (64, 36), L("style"), self.cycle_style)
+        self.btn(r, (P + 4, ty), (170, 34), L("create_ally"), self._tab_create, key="t:create", ts=0.85)
+        self.btn(r, (P + 4 + 178, ty), (170, 34), L("join_ally"), self._tab_join, kind='join', key="t:join", ts=0.85)
+        self._tab_join()
+
+    def _do_logout(self):
+        self.api.logout()
+        self.close()
+        LoginWindow(self.api, _route_after_login)
+
+    def _clear_sub(self, which):
+        self._tab = which
+        self.setkind("t:create", 'join' if which == "create" else 'accent')
+        self.setkind("t:join", 'join' if which == "join" else 'accent')
+        if self.sub is not None:
+            try:
+                self.sub.delete()
+            except Exception:
+                pass
+        self.sub = bui.containerwidget(parent=self.root, position=(self._ix, self._iy), size=(self.IW, self.IH), background=False)
+        return self.sub
+
+    def _tab_create(self):
+        s = self._clear_sub("create")
+        IW, IH = self.IW, self.IH
+
+        def cb_status(st):
+            if self._tab != "create" or not self.root.exists():
+                return
+            if not isinstance(st, dict) or "price" not in st:
+                if st == "0":
+                    Popup(L("error"), L("already_in_ally"), kind="error")
+                else:
+                    Popup(L("error"), str(st), kind="error")
+                return
+            self.bar(s, IW / 2 - 170, IH - 70, 340, 46)
+            self.lbl(s, (IW / 2, IH - 47), f"{L('cost')}: {fmt(st['price'])} {L('coins')}", 0.9, GOLD, 'center', 320)
+            self.inp_name = self.field(s, (IW / 2 - 150, IH - 130), (300, 40), "", max_chars=15, desc=L("alliance_name"))
+            self.btn(s, (IW / 2 - 100, IH - 190), (200, 44), L("create_ally"), self._do_create, kind='join')
+        Network.fetch(self.api, "create_status", callback=cb_status)
 
     def _do_create(self):
         name = (bui.textwidget(query=self.inp_name) or '').strip()
         if not name:
-            AlertDialog(L('error'), L('name_hint'), kind='error')
+            Popup(L("error"), L("enter_name"), kind="error")
             return
 
-        def cb1(r1):
+        def cb(r1):
             if r1 == "confirm_needed":
                 def cb2(r2):
                     if isinstance(r2, dict) and "url" in r2:
-                        self._go_main()
+                        self._go_to_main()
                     elif isinstance(r2, dict) and "err" in r2:
-                        AlertDialog(L('error'), str(r2['err']), kind='error')
+                        Popup(L("error"), str(r2["err"]), kind="error")
                     else:
-                        AlertDialog(L('error'), L('fail'), kind='error')
-                Net.fetch(self.api, "create_ally", (name, 1), cb=cb2)
+                        Popup(L("error"), L("create_fail"), kind="error")
+                Network.fetch(self.api, "create_ally", (name, 1), callback=cb2)
             elif r1 == "already_in_ally":
-                AlertDialog(L('error'), L('already_ally'), kind='error')
+                Popup(L("error"), L("already_in_ally"), kind="error")
             elif isinstance(r1, dict) and "err" in r1:
-                AlertDialog(L('error'), str(r1['err']), kind='error')
+                Popup(L("error"), str(r1["err"]), kind="error")
             else:
-                AlertDialog(L('error'), L('fail'), kind='error')
-        Net.fetch(self.api, "create_ally", (name, 0), cb=cb1)
+                Popup(L("error"), L("create_fail"), kind="error")
+        Network.fetch(self.api, "create_ally", (name, 0), callback=cb)
 
-    def _render_join(self):
-        c = self._sub
-        CW, CH = self._content_w, self._content_h
-
-        # Search row
-        self.inp_search = self.field(c, (10, CH - 50), (CW - 130, 40),
-                                     "", max_chars=30, desc=L('search_hint'))
-        self.button(c, (CW - 116, CH - 50), (106, 40),
-                    "🔍  " + L('search'), MyCall(self._do_join_search),
-                    kind='accent', text_scale=0.65)
-
-        # Order buttons
-        orders = [("rank", L('rank_by')),
-                  ("new", L('newest')),
-                  ("old", L('oldest')),
-                  ("count", L('most'))]
-        bw = (CW - 20 - 3 * 6) / 4
-        for i, (code, label) in enumerate(orders):
-            kind = 'accent' if code == self._order else 'surface'
-            b = self.button(c, (10 + i * (bw + 6), CH - 96),
-                            (bw, 32), label,
-                            MyCall(self._set_order, code),
-                            kind=kind, text_scale=0.6)
-
-        # Results area
-        self._join_box = bui.containerwidget(
-            parent=c, position=(10, 10),
-            size=(CW - 20, CH - 116),
-            background=False,
-        )
+    def _tab_join(self):
+        s = self._clear_sub("join")
+        IW, IH = self.IW, self.IH
+        self.order_type = "rank"
+        self.inp_search = self.field(s, (0, IH - 38), (IW - 110, 36), "", max_chars=30, desc=L("search"))
+        self.btn(s, (IW - 102, IH - 38), (102, 36), L("search"), self._do_join_search, kind='join')
+        
+        orders = [("rank", L("order_rank")), ("new", L("order_new")), ("old", L("order_old")), ("count", L("order_count"))]
+        bw = (IW - 3 * 6) / 4
+        for i, (code, name) in enumerate(orders):
+            self.btn(s, (i * (bw + 6), IH - 38 - 6 - 30), (bw, 30), name, MyCall(self._set_order, code),
+                     kind='join' if code == "rank" else 'accent', key="o:" + code, ts=0.7)
+                     
+        self.join_h = IH - 38 - 6 - 30 - 8
+        self.join_box = bui.containerwidget(parent=s, position=(0, 0), size=(IW, self.join_h), background=False)
         self._do_join_search()
 
     def _set_order(self, code):
-        self._order = code
-        self._new_sub()
-        self._render_join()
+        self.order_type = code
+        for k in ("rank", "new", "old", "count"):
+            self.setkind("o:" + k, 'join' if k == code else 'accent')
+        self._do_join_search()
 
     def _do_join_search(self):
         search = (bui.textwidget(query=self.inp_search) or '').strip()
-        order = self._order
-        box, CW, CH = self._join_box, self._content_w - 20, self._content_h - 116
+        order = self.order_type
+        box, IW, bh = self.join_box, self.IW, self.join_h
 
         def cb(allies):
-            if self._tab != "join" or not self.root.exists() or order != self._order:
+            if self._tab != "join" or not self.root.exists() or order != self.order_type:
                 return
             try:
                 for c in box.get_children():
@@ -2819,204 +2255,162 @@ class HubWindow(BaseWindow):
                 pass
             if not isinstance(allies, list):
                 return
-            visible = [a for a in allies if a.get('request') != -1]
+            visible = [a for a in allies if a.get("request") != -1]
             if not visible:
-                self.label(box, (CW / 2, CH / 2), L('empty'),
-                           scale=0.8, color=self.pal['dim'], h='center')
+                self.lbl(box, (IW / 2, bh / 2), L("empty"), 0.8, DIM, 'center')
                 return
-
-            sc = bui.scrollwidget(
-                parent=box, position=(0, 0), size=(CW, CH),
-                color=(0.4, 0.6, 0.3), border_opacity=0.0,
-            )
-            rh = 42
-            hh = max(rh * len(visible) + 10, CH)
-            cont = bui.containerwidget(parent=sc, size=(CW - 12, hh), background=False)
-            rw = CW - 12
+                
+            sc, cont, hh = self.scroll(box, (0, 0), (IW, bh), len(visible), 36)
+            rw = IW - 12
             y = hh
             for a in visible:
-                y -= rh
-                is_req = a.get('request') == 1
-                try:
-                    bui.imagewidget(
-                        parent=cont, position=(0, y + 2),
-                        size=(rw, rh - 4),
-                        texture=bui.gettexture('white'),
-                        color=self.pal['surface'], opacity=0.5,
-                    )
-                except Exception:
-                    pass
-                self.label(cont, (10, y + rh / 2),
-                           f"#{a.get('rank') or '—'}",
-                           scale=0.55, color=self.pal['gold'],
-                           maxwidth=40)
-                self.label(cont, (60, y + rh / 2),
-                           a.get('name', '?'), scale=0.7,
-                           color=self.pal['text'], maxwidth=rw - 200)
-                self.button(cont, (rw - 128, y + 8), (120, 28),
-                            "📩  " + L('request') if is_req else "✓  " + L('join'),
-                            MyCall(self._do_join, a),
-                            kind='accent' if is_req else 'success',
-                            text_scale=0.6)
-        Net.fetch(self.api, "list_allies", (search, order), cb=cb)
+                y -= 36
+                is_req = a.get("request") == 1
+                self.bar(cont, 0, y + 2, rw, 32)
+                self.lbl(cont, (10, y + 18), f"#{a.get('rank') or '-'}   {a.get('name')}", 0.7, TXT, maxwidth=rw - 130)
+                self.btn(cont, (rw - 108, y + 6), (100, 24), L("request_btn") if is_req else L("join_btn"),
+                         MyCall(self._do_join, a), kind='accent' if is_req else 'join', ts=0.65)
+        Network.fetch(self.api, "list_allies", (search, order), callback=cb)
 
     def _do_join(self, a):
         def cb(r):
             if r == "requested":
-                ToastStack.push(L('req_sent'), 'success')
-                AlertDialog(L('success'), L('req_sent'), kind='success')
-            elif (r in ("./post/Ally", "./post.php?post=Ally")
-                  or (isinstance(r, str) and "post=Ally" in r)
-                  or r == "already_in_ally"):
-                self._go_main(0.9)
+                Popup(L("success"), L("request_sent"), kind="success")
+            elif (r in ("./post/Ally", "./post.php?post=Ally") or (isinstance(r, str) and "post=Ally" in r) or r == "already_in_ally"):
+                self._go_to_main(1.0)
             elif r == "request_rejected":
-                AlertDialog(L('fail'), L('req_rejected'), kind='error')
+                Popup(L("fail"), L("req_rejected"), kind="error")
             elif r == "request_unseen":
-                AlertDialog(L('fail'), L('pending'), kind='error')
+                Popup(L("fail"), L("req_pending"), kind="error")
             elif r == "already_left":
-                AlertDialog(L('fail'), L('left_recent'), kind='error')
+                Popup(L("fail"), L("left_recent"), kind="error")
             else:
-                reason = L('no_req')
+                reason = L("no_requirements")
                 reqs = []
-                if a.get('coin'):
+                if a.get("coin"):
                     reqs.append(f"{L('min_coin')}: {a['coin']}")
-                if a.get('top'):
-                    reqs.append(f"{L('top')}: {a['top']}")
-                if a.get('score'):
-                    reqs.append(f"{L('score')}: {a['score']}")
-                if a.get('bot'):
-                    reqs.append(L('bot'))
+                if a.get("top"):
+                    reqs.append(f"{L('req_top')}: {a['top']}")
+                if a.get("score"):
+                    reqs.append(f"{L('min_score')}: {a['score']}")
+                if a.get("bot"):
+                    reqs.append(L("bot_link"))
                 if reqs:
-                    reason += f"\n\n{L('needed')}:\n- " + "\n- ".join(reqs)
-                AlertDialog(L('fail'), reason, kind='error')
-        Net.fetch(self.api, "join_ally", (a['id'],), cb=cb)
+                    reason += f"\n{L('needed')}:\n- " + "\n- ".join(reqs)
+                Popup(L("fail"), reason, kind="error")
+        Network.fetch(self.api, "join_ally", (a["id"],), callback=cb)
 
-    def _go_main(self, delay=0.8):
+    def _go_to_main(self, delay=0.8):
         self.close()
-        _later(delay, MyCall(_route))
-
-    def _logout(self):
-        self.api.logout()
-        self.close()
-        _later(0.3, MyCall(LoginWindow, self.api, _route))
-
+        _later(delay, MyCall(_route_after_login))
 
 # ═══════════════════════════════════════════════════════════════
-# ROUTER
+# 🚦 ROUTER & INITIALIZATION
 # ═══════════════════════════════════════════════════════════════
 
-def _get_api():
-    global _api_singleton
-    if _api_singleton is None:
-        _api_singleton = BslifeAPI()
-    return _api_singleton
+def _ensure_api():
+    global _api
+    if _api is None:
+        _api = BslifeAPI()
+    return _api
 
-
-def _route():
-    global _opening, _top_win
-    _opening = False
-    api = _get_api()
-    if _top_win is not None:
-        try:
-            _top_win.close()
-        except Exception:
-            pass
-        _top_win = None
-    _close_all_dialogs()
-
-    def cb(st):
-        if st in ("3", "0", "", None):
-            api.logout()
-            LoginWindow(api, _route)
-            return
-        if isinstance(st, dict) and "name" in st:
-            MainWindow(api)
-        elif isinstance(st, dict) and "error" in st:
-            AlertDialog(L('error'), str(st['error']), kind='error')
-        else:
-            HubWindow(api)
-
-    Net.fetch(api, "ally_status", cb=cb)
-
-
-def open_manager():
-    global _opening
+def open_ally_manager():
+    """Entry point for the mod."""
+    global _is_opening
     try:
-        if _top_win is not None and _top_win.root.exists():
+        if _top is not None and _top.root.exists():
             return
     except Exception:
         pass
-    if _opening:
+    if _is_opening:
         return
-    _opening = True
-    api = _get_api()
+    _is_opening = True
+    api = _ensure_api()
 
-    def cb(who):
-        global _opening
-        _opening = False
+    def check(who):
+        global _is_opening
+        _is_opening = False
         if not who:
-            LoginWindow(api, _route)
+            LoginWindow(api, _route_after_login)
         else:
-            _route()
-    Net.fetch(api, "whoami", cb=cb)
+            _route_after_login()
+    Network.fetch(api, "whoami", callback=check)
 
+def _route_after_login():
+    """Determines which window to show after login (Main or Hub)."""
+    global _top, _is_opening
+    _is_opening = False
+    api = _ensure_api()
+    
+    if _top is not None:
+        try:
+            _top.close()
+        except Exception:
+            pass
+        _top = None
+
+    def check_status(st):
+        if st in ("3", "0", "", None):
+            api.logout()
+            LoginWindow(api, _route_after_login)
+            return
+        if isinstance(st, dict) and "name" in st:
+            AllyMainWindow(api)
+        elif isinstance(st, dict) and "error" in st:
+            Popup(L("error"), str(st["error"]), kind="error")
+        else:
+            HubWindow(api)
+    Network.fetch(api, "ally_status", callback=check_status)
 
 # ═══════════════════════════════════════════════════════════════
-# PARTY WINDOW HOOK
+# 🔌 PARTY WINDOW HOOK
 # ═══════════════════════════════════════════════════════════════
 
-def _add_btn(win):
+def _add_launch_button(win):
+    """Adds the mod button to the Party window."""
     try:
         root = win._root_widget
         if hasattr(win, '_W') and hasattr(win, '_H'):
             W, H = win._W, win._H
             pos = (W - 10 - 6 - 40 - 8 - 64 - 8 - 40, H - 10 - 54 + 9)
             size = (40, 36)
+            rgb = _theme_rgb(_get_theme(babase.app.config.get(_CFG_THEME, 'Valhalla')), time.time() - _FX_T0, 1.0)
+            color, tcol = _accent(rgb), _palette(rgb)['text']
         else:
             width = getattr(win, "_width", 600)
             height = getattr(win, "_height", 500)
             sz = width / 15.0
             pos = (width - width / 30.0, height - 135.0)
             size = (sz, sz)
-
-        base = _theme_rgb(_theme_current()[1], time.time() - _FX_T0)
-        pal = _palette(base)
-        bui.buttonwidget(
-            parent=root, size=size, position=pos,
-            label=u"\ue010", button_type="square",
-            autoselect=False,
-            color=pal['accent'], textcolor=(1, 1, 1),
-            on_activate_call=MyCall(open_manager),
-        )
+            color, tcol = (0.20, 0.45, 0.80), (1.0, 1.0, 1.0)
+        bui.buttonwidget(parent=root, size=size, position=pos, label=u"\ue010", button_type="square",
+                         autoselect=False, color=color, textcolor=tcol, on_activate_call=MyCall(open_ally_manager))
     except Exception as e:
-        log(f"Patch: {e}")
+        log(f"Patch error: {e}")
 
-
-def _patch():
+def _patch_party_window():
+    """Hooks into the PartyWindow class to add the launch button."""
     orig = party.PartyWindow
     if isinstance(orig, type):
-        if getattr(orig, '_bslife_v11', False):
-            return
         orig_init = orig.__init__
 
         def patched(self, *a, **k):
             orig_init(self, *a, **k)
-            _add_btn(self)
+            _add_launch_button(self)
         orig.__init__ = patched
-        orig._bslife_v11 = True
     else:
         def wrapper(*a, **k):
             win = orig(*a, **k)
-            _add_btn(win)
+            _add_launch_button(win)
             return win
         party.PartyWindow = wrapper
 
+# ═══════════════════════════════════════════════════════════════
+# 📦 EXPORT PLUGIN
+# ═══════════════════════════════════════════════════════════════
 
 # ba_meta export babase.Plugin
 class BSLifeAllyMod(babase.Plugin):
     def on_app_running(self):
-        log("--- BSLIFE v11 ULTRA loaded ---")
-        _patch()
-
-
-print("BSLIFE Ally Manager v11 ULTRA · @Tajerbetbot")
+        log("--- BSLIFE Valhalla Edition Loaded ---")
+        _patch_party_window()
